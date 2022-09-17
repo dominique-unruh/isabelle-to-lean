@@ -30,6 +30,7 @@ object Main {
   }
   
   def main(args: Array[String]): Unit = {
+    // We can get all theorems from a thy (incl ancestors) via "Global_Theory.all_thms_of thy false"
 //    val thmName = "HOL.conjI"
     val thmName = "Binomial.binomial_eq_0"
 
@@ -62,6 +63,7 @@ object Main {
     val tvars = IsabelleOps.addTVars(prop).retrieveNow.reverse
     assert(tfrees.isEmpty)
 
+    // TODO add [Inhabited <var>] for each tvar
     val targs = tvars map { case ((name, index), sort) =>
       // TODO: don't ignore sort!
       val name2 = mapName(name + index, category = Namespace.TVar)

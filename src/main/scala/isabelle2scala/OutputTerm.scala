@@ -1,24 +1,49 @@
 package isabelle2scala
 
+import de.unruh.isabelle.pure.Term
+import scalaz.{Cord, Show}
+import scalaz.Scalaz.cordInterpolator
+import scalaz.Cord
+
+import scala.language.implicitConversions
+import OutputTerm.given
+
 sealed trait OutputTerm {
-  // TODO use ropes instead of strings
-  protected def maybeParens(term: OutputTerm, parens: Boolean): String =
-    if (parens) s"($term)" else term.toString
+  def toCord: Cord
+  override def toString: String = toCord.shows
+
+  protected def maybeParens(term: OutputTerm, parens: Boolean): Cord =
+    if (parens) cord"($term)" else term.toCord
+}
+object OutputTerm {
+  implicit object showTerm extends Show[Term] {
+    override def show(f: Term): Cord = Cord(Term.toString)
+  }
+  implicit object showOutputTerm extends Show[OutputTerm] {
+    override def show(f: OutputTerm): Cord = f.toCord
+  }
+  // There is scalaz.std.StringInstances.stringInstance but that encloses strings in "".
+  implicit object showString extends Show[String] {
+    override def show(f: String): Cord = Cord(f)
+    override def shows(f: String): String = f
+  }
 }
 
 case class Comment(comment: String, term: OutputTerm) extends OutputTerm {
-  override def toString: String = s"/-$comment-/ $term"
+  assert(!comment.contains("/-"))
+  assert(!comment.contains("-/"))
+  override def toCord: Cord = cord"/-$comment-/ $term"
 }
 
 case class Identifier(name: String, at: Boolean = false) extends OutputTerm {
-  override def toString: String = if (at) "@"+name else name
+  override def toCord: Cord = if (at) cord"@$name" else Cord(name)
 }
 
 case class Application(head: OutputTerm, arg: OutputTerm) extends OutputTerm {
-  override def toString: String = {
+  override def toCord: Cord = {
     val headNoParens = head.isInstanceOf[Identifier] || head.isInstanceOf[Application]
     val argNoParens = arg.isInstanceOf[Identifier]
-    maybeParens(head, !headNoParens) + " " + maybeParens(arg, !argNoParens)
+    cord"${maybeParens(head, !headNoParens)} ${maybeParens(arg, !argNoParens)}"
   }
 }
 object Application {
@@ -27,22 +52,22 @@ object Application {
 }
 
 case class Abstraction(variable: String, typ: OutputTerm, body: OutputTerm) extends OutputTerm {
-  override def toString: String =
-    s"fun ${TypeConstraint(Identifier(variable), typ)} => $body"
+  override def toCord: Cord =
+    cord"fun ${TypeConstraint(Identifier(variable), typ).toCord} => $body"
 }
 
 case class FunType(inType: OutputTerm, outType: OutputTerm) extends OutputTerm {
-  override def toString: String = {
+  override def toCord: Cord = {
     val inNoParens = inType.isInstanceOf[Identifier] || inType.isInstanceOf[Application]
     val outNoParens = outType.isInstanceOf[Identifier] || outType.isInstanceOf[Application] || outType.isInstanceOf[FunType]
-    maybeParens(inType, !inNoParens) + " -> " + maybeParens(outType, !outNoParens)
+    cord"${maybeParens(inType, !inNoParens)} -> ${maybeParens(outType, !outNoParens)}"
   }
 }
 
 case class TypeConstraint(value: OutputTerm, typ: OutputTerm) extends OutputTerm {
-  override def toString: String = {
+  override def toCord: Cord = {
     val valueNoParens = value.isInstanceOf[Identifier] || value.isInstanceOf[Application]
     val typNoParens = typ.isInstanceOf[Identifier] || typ.isInstanceOf[Application] || typ.isInstanceOf[FunType]
-    maybeParens(value, !valueNoParens) + ": " + maybeParens(typ, !typNoParens)
+    cord"${maybeParens(value, !valueNoParens)}: ${maybeParens(typ, !typNoParens)}"
   }
 }

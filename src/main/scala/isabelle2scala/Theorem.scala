@@ -20,7 +20,6 @@ case class Theorem(pthm: PThm) extends LogicalEntity {
   def proof: Proofterm = pthm.fullProof(ctxt.theoryOf)
 
   def print(output: PrintWriter): Unit = {
-    println(s"YYY: ${name}: ${prop.pretty(ctxt)}")
     val argString = Main.argumentsOfProp(prop)
     val propString = Main.translateTermClean(prop)
     val proof = this.proof
@@ -91,11 +90,13 @@ case class Theorem(pthm: PThm) extends LogicalEntity {
         Application(proofToString(proof1, propEnv, termEnv), proofToString(proof2, propEnv, termEnv))
       case Proofterm.Appt(proof, term) =>
         assert(term.nonEmpty)
+        // TODO: unbounded free/var in term: replace by "default : <typ>"
         Application(proofToString(proof, propEnv, termEnv), Main.translateTermClean(term.get, env = termEnv))
       case Proofterm.AbsP(name, term, proof) =>
         assert(term.nonEmpty)
         assert(name.nonEmpty)
         val name2 = Naming.mapName(name, category = Namespace.ProofAbsVar)
+        // TODO: unbounded free/var in term: replace by "default : <typ>"
         Abstraction(name2, Main.translateTermClean(term.get, env = termEnv), proofToString(proof, name2 :: propEnv, termEnv))
       case Proofterm.Abst(name, typ, proof) =>
         assert(typ.nonEmpty)
@@ -116,7 +117,6 @@ case class Theorem(pthm: PThm) extends LogicalEntity {
         ???
       case pthm: PThm =>
         val theorem = Theorems.compute(pthm)
-        println(s"XXX ${theorem.name}, ${theorem.prop.pretty(ctxt)}, ${pthm.header.types.get.map(_.pretty(ctxt))}")
         assert(pthm.header.types.nonEmpty)
         val types = pthm.header.types.get.map(Main.translateTyp)
         Comment(s"${pthm.header.types.get.map(_.pretty(ctxt))}", Application(Identifier(theorem.fullName, at = true), types :_*))
