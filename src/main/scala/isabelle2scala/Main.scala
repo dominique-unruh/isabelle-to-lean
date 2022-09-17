@@ -30,12 +30,11 @@ object Main {
   }
   
   def main(args: Array[String]): Unit = {
-    val thmName = "HOL.conjI"
-//    val thmName = "Binomial.binomial_eq_0"
+//    val thmName = "HOL.conjI"
+    val thmName = "Binomial.binomial_eq_0"
 
     val thm = Thm(ctxt, thmName)
     val pthm = getPThm(thm)
-    val prf = pthm.body.proofOpenMlValue.retrieveNow
 
     output.println(preamble)
     Theorems.compute(pthm)
@@ -43,6 +42,7 @@ object Main {
     println(s"# theorems:       ${Theorems.count}")
     println(s"# named theorems: ${Theorems.namedCount}")
     println(s"# axioms:         ${Axioms.count}")
+    println(s"# constants:      ${Constants.count}")
 
     output.close()
   }
@@ -103,6 +103,13 @@ object Main {
       |-- def Pure_prop (x: Prop) := x
       |def HOL_bool := Bool
       |axiom itself (a: Type) : Type
+      |axiom Nat_nat : Type
+      |axiom Set_set : Type -> Type
+      |axiom Nat_ind : Type
+      |axiom Num_num : Type
+      |axiom Sum_Type_sum : Type -> Type -> Type
+      |axiom Product_Type_unit : Type
+      |axiom Product_Type_prod : Type -> Type -> Type
       |
       |""".stripMargin
 }
