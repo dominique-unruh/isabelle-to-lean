@@ -18,6 +18,7 @@ object Constants {
   private def actuallyCompute(name: String): Constant = {
     println(s"Computing constant: $name: $name")
     val constant = Constant(name)
+    constant.print(Globals.output)
     constant
   }
 }

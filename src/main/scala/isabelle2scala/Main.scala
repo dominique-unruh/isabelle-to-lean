@@ -31,6 +31,7 @@ object Main {
   
   def main(args: Array[String]): Unit = {
     val thmName = "HOL.conjI"
+//    val thmName = "Binomial.binomial_eq_0"
 
     val thm = Thm(ctxt, thmName)
     val pthm = getPThm(thm)
@@ -66,33 +67,42 @@ object Main {
     }
     (targs ++ args).mkString(" ")
   }
-  
-  def translateTerm(term: Term, env: List[String] = Nil): String = term match {
-    case App(t, u) => s"(${translateTerm(t, env)}) (${translateTerm(u, env)})"
+
+  /** Assumptions:
+   * - no TVars or TFree have same name but different types
+   * - no empty names in Abs or shadowed names */
+  def translateTerm(term: Term, env: List[String] = Nil): OutputTerm = term match {
+    case App(t, u) => Application({translateTerm(t, env)}, translateTerm(u, env))
     case Abs(name, typ, term) =>
+      assert(name.nonEmpty)
       val name2 = quote(name, category = Namespace.AbsVar)
-      s"fn ($name2 : ${translateTyp(typ)}) => ${translateTerm(term, name2 :: env)}"
-    case Bound(i) => env(i)
-    case Var(name, index, typ) => quote(s"$name$index", category = Namespace.Var)
-    case Free(name, typ) => quote(name, category = Namespace.Free)
+      Abstraction(name2, translateTyp(typ), translateTerm(term, name2 :: env))
+    case Bound(i) => Identifier(env(i))
+    case Var(name, index, typ) => Identifier(quote(s"$name$index", category = Namespace.Var))
+    case Free(name, typ) => Identifier(quote(name, category = Namespace.Free))
     case Const(name, typ) =>
       val const = Constants.compute(name)
-      s"${const.fullName} : ${translateTyp(typ)}"
+      val args = const.instantiate(typ).map(translateTyp)
+      Application(Identifier(const.fullName, at = true), args :_*)
   }
 
-  def translateTyp(typ: Typ): String = typ match {
-    case Type("fun", t1, t2) => s"(${translateTyp(t1)}) -> ${translateTyp(t2)}"
+  /** Assumptions: no TVars or TFree have same name but different types */
+  def translateTyp(typ: Typ): OutputTerm = typ match {
+    case Type("fun", t1, t2) => FunType(translateTyp(t1), translateTyp(t2))
     case Type("fun", _*) => throw new RuntimeException("should not happen")
-    case Type(tcon, typs@_*) => (quote(tcon, category = Namespace.TypeCon) :: typs.toList.map("(" + translateTyp(_) + ")")).mkString(" ")
-    case TVar(name, index, sort) => quote(name + index, category = Namespace.TVar)
-    case TFree(name, sort) => quote(name, category = Namespace.TFree)
+    case Type(tcon, typs@_*) => Application(Identifier(quote(tcon, category = Namespace.TypeCon)),
+      typs.map(translateTyp) :_*)
+    case TVar(name, index, sort) => Identifier(quote(name + index, category = Namespace.TVar))
+    case TFree(name, sort) => Identifier(quote(name, category = Namespace.TFree))
   }
 
   val preamble: String =
     """def prop := Prop
-      |def Pure_imp x y := x -> y
-      |def Pure_eq {a: Type} (x y : a) := x = y
-      |def Pure_prop (x: Prop) := x
+      |-- def Pure_imp x y := x -> y
+      |-- def Pure_eq {a: Type} (x y : a) := x = y
+      |-- def Pure_prop (x: Prop) := x
+      |def HOL_bool := Bool
+      |axiom itself (a: Type) : Type
       |
       |""".stripMargin
 }
