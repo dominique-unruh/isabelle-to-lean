@@ -7,27 +7,35 @@ import java.nio.file.Path
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
+import de.unruh.isabelle.mlvalue.MLValue.compileFunction
+
+import de.unruh.isabelle.pure.Implicits.given
+import de.unruh.isabelle.mlvalue.Implicits.given
 
 sealed trait LogicalEntity
 
 //noinspection UnstableApiUsage
 case class Theorem(pthm: PThm) extends LogicalEntity {
   override def toString: String = s"Theorem(${pthm.header.name}@${pthm.header.serial})"
-  val fullName: String = Main.quote(name = pthm.header.name, category = "theorem")
+  val fullName: String = Main.quote(name = pthm.header.name, category = Namespace.Theorem)
 }
 
 case class Axiom(name: String, prop: Term) extends LogicalEntity {
   override def toString: String = s"Axiom($name)"
-  val fullName: String = Main.quote(prefix = "axiom_", name = name, category = "axiom")
+  val fullName: String = Main.quote(prefix = "axiom_", name = name, category = Namespace.Axiom)
   def print(output: PrintWriter): Unit = {
-    output.println(s"Axiom $fullName : ${Main.translateTerm(prop)}")
+    output.println(s"axiom $fullName ${Main.argumentsOfProp(prop)}: ${Main.translateTerm(prop)}")
     output.println()
   }
 }
 
+enum Namespace {
+  case Var, Free, Theorem, Axiom, Constant, AbsVar, TFree, TVar, TypeCon
+}
+
 case class Constant(name: String) extends LogicalEntity {
   override def toString: String = s"Const($name)"
-  val fullName: String = Main.quote(name = name, category = "constant")
+  val fullName: String = Main.quote(name = name, category = Namespace.Constant)
 }
 
 //noinspection UnstableApiUsage
@@ -48,7 +56,7 @@ object Main {
 
   type Serial = Long
 
-  val output = new PrintWriter(new FileOutputStream("test.txt"))
+  val output = new PrintWriter(new FileOutputStream("test.lean"))
 
   object axioms {
     def count: Int = nameMap.size
@@ -119,10 +127,7 @@ object Main {
               if (prop != oldProp)
                 println("  Propositions differ!")
             case None =>
-              nameMap.put(pthm.header.name, pthm.header.serial) match {
-                case Some(old) =>
-                case None =>
-              }
+              nameMap.put(pthm.header.name, pthm.header.serial)
           }
         }
         theorem
@@ -161,6 +166,8 @@ object Main {
     val thm = Thm(ctxt, thmName)
     val pthm = getPThm(thm)
     val prf = pthm.body.proofOpenMlValue.retrieveNow
+
+    output.println(preamble)
     theorems.compute(pthm)
 
     println(s"# theorems:       ${theorems.count}")
@@ -171,27 +178,64 @@ object Main {
   }
 
   // TODO: check for duplicate Var/Free with different types
+  // TODO: check for duplicate TFree/TVar with different sorts
+  def argumentsOfProp(prop: Term): String = {
+    val vars = Ops.addVars(prop).retrieveNow.reverse
+    val frees = Ops.addFrees(prop).retrieveNow.reverse
+    assert(frees.isEmpty)
+    val tfrees = Ops.addTFrees(prop).retrieveNow.reverse
+    val tvars = Ops.addTVars(prop).retrieveNow.reverse
+    assert(tfrees.isEmpty)
+    val targs = tvars map { case ((name,index), sort) =>
+      // TODO: don't ignore sort!
+      val name2 = quote(name+index, category = Namespace.TVar)
+      s"{$name2 : Type}"
+    }
+    val args = vars map { case ((name, index), typ) =>
+      val name2 = quote(name+index, category = Namespace.Var)
+      s"($name2 : ${translateTyp(typ)})"
+    }
+    (targs ++ args).mkString(" ")
+  }
+
+  //noinspection TypeAnnotation
+  object Ops {
+    val addFrees = compileFunction[Term, List[(String,Typ)]]("fn t => Term.add_frees t []")
+    val addVars = compileFunction[Term, List[((String,Int),Typ)]]("fn t => Term.add_vars t []")
+    val addTFrees = compileFunction[Term, List[(String,List[String])]]("fn t => Term.add_tfrees t []")
+    val addTVars = compileFunction[Term, List[((String,Int),List[String])]]("fn t => Term.add_tvars t []")
+  }
+
   def translateTerm(term: Term, env: List[String] = Nil): String = term match {
     case App(t,u) => s"(${translateTerm(t, env)}) (${translateTerm(u, env)})"
     case Abs(name,typ,term) =>
-      val name2 = quote(name, category = "abs")
+      val name2 = quote(name, category = Namespace.AbsVar)
       s"fn ($name2 : ${translateTyp(typ)}) => ${translateTerm(term, name2 :: env)}"
     case Bound(i) => env(i)
-    case Var(name,index,typ) => quote(s"_$name$index", category = "var")
-    case Free(name,typ) => name
+    case Var(name,index,typ) => quote(s"$name$index", category = Namespace.Var)
+    case Free(name,typ) => quote(name, category = Namespace.Free)
     case Const(name, typ) =>
       val const = constants.compute(name)
       s"${const.fullName} : ${translateTyp(typ)}"
   }
 
-  // TODO: check for duplicate TFree/TVar with different types
   def translateTyp(typ: Typ) : String = typ match {
-    case Type(tcon,typs @_*) => (tcon :: typs.toList.map("("+translateTyp(_)+")")).mkString(" ")
-    case TVar(name, index, sort) => s"_$name$index"
-    case TFree(name, sort) => name
+    case Type("fun", t1, t2) => s"(${translateTyp(t1)}) -> ${translateTyp(t2)}"
+    case Type("fun", _*) => throw new RuntimeException("should not happen")
+    case Type(tcon,typs @_*) => (quote(tcon, category = Namespace.TypeCon) :: typs.toList.map("("+translateTyp(_)+")")).mkString(" ")
+    case TVar(name, index, sort) => quote(name+index, category = Namespace.TVar)
+    case TFree(name, sort) => quote(name, category = Namespace.TFree)
   }
 
   // TODO avoid conflicts between categories
-  def quote(name: String, prefix: String = "", category: String): String =
-    prefix + name.replace(".","_")
+  def quote(name: String, prefix: String = "", category: Namespace): String =
+    prefix + name.replace('.','_').replace('\'', '_')
+
+  val preamble: String =
+    """def prop := Prop
+      |def Pure_imp x y := x -> y
+      |def Pure_eq {a: Type} (x y : a) := x = y
+      |def Pure_prop (x: Prop) := x
+      |
+      |""".stripMargin
 }
