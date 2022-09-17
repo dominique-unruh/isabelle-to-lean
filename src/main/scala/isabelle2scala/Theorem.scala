@@ -18,7 +18,10 @@ import isabelle2scala.Theorem.{Env, proofToString}
 case class Theorem(pthm: PThm) extends LogicalEntity {
   override def toString: String = s"Theorem(${pthm.header.name}@${pthm.header.serial})"
 
-  val fullName: String = Naming.mapName(name = s"${name}@${pthm.header.serial}", category = Namespace.Theorem)
+  val fullName: String = Naming.mapName(
+    name = (name, pthm.header.serial),
+    suggestion = if (name.nonEmpty) name else "thm_" + pthm.header.serial,
+    category = Namespace.Theorem)
 
   def proof: Proofterm = pthm.fullProof(ctxt.theoryOf)
 
@@ -100,6 +103,8 @@ object Theorem {
 
   /** Assumption: All names in AbsP are non-empty and no shadowing */
   def proofToString(proof: Proofterm, env: Env): OutputTerm = {
+    def intersperseWildcards(terms: Seq[OutputTerm]): Seq[OutputTerm] = terms.flatMap(t => Seq(t, Wildcard))
+
     proof match {
       case Proofterm.MinProof =>
         throw new RuntimeException("MinProof")
@@ -126,7 +131,7 @@ object Theorem {
       case Proofterm.PAxm(name, prop, typ) =>
         val axiom = Axioms.compute(name, prop)
         assert(typ.nonEmpty)
-        Application(Identifier(axiom.fullName, at = true), typ.get.map(Main.translateTyp): _*)
+        Application(Identifier(axiom.fullName, at = true), intersperseWildcards(typ.get.map(Main.translateTyp)): _*)
       case Proofterm.PBound(index) =>
         Identifier(env.propEnv(index))
       case Proofterm.OfClass(typ, clazz) =>
@@ -137,7 +142,7 @@ object Theorem {
         val theorem = Theorems.compute(pthm)
         assert(pthm.header.types.nonEmpty)
         val types = pthm.header.types.get.map(Main.translateTyp)
-        Comment(s"${pthm.header.types.get.map(_.pretty(ctxt))}", Application(Identifier(theorem.fullName, at = true), types: _*))
+        Comment(s"${pthm.header.types.get.map(_.pretty(ctxt))}", Application(Identifier(theorem.fullName, at = true), intersperseWildcards(types): _*))
     }
   }
 }

@@ -30,7 +30,7 @@ case class Constant(name: String) extends LogicalEntity {
   def print(output: PrintWriter): Unit = {
     val typString = Main.translateTyp(typ)
     val argString = typArgs map { case (name,index) =>
-      val name2 = Naming.mapName(name + index, category = Namespace.TVar)
+      val name2 = Naming.mapName((name, index), category = Namespace.TVar)
       s"{$name2 : Type}"
     } mkString " "
 

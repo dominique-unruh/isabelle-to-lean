@@ -66,12 +66,12 @@ object Main {
     // TODO add [Inhabited <var>] for each tvar
     val targs = tvars map { case ((name, index), sort) =>
       // TODO: don't ignore sort!
-      val name2 = mapName(name + index, category = Namespace.TVar)
-      s"{$name2 : Type}"
+      val name2 = mapName((name, index), category = Namespace.TVar)
+      s"{$name2 : Type} [Inhabited $name2]"
     }
 
     val vars2 = vars map { case ((name, index), typ) =>
-      val name2 = mapName(name + index, category = Namespace.Var)
+      val name2 = mapName((name, index), category = Namespace.Var)
       s"($name2 : ${translateTyp(typ)})"
     }
 
@@ -103,14 +103,14 @@ object Main {
     case Var(name, index, typ) =>
       defaultAllBut match {
         case Some((vars,_)) if !vars.contains(name,index) =>
-          TypeConstraint(Identifier("default"), translateTyp(typ))
+          Comment(s"?$name.$index", TypeConstraint(Identifier("default"), translateTyp(typ)))
         case _ =>
-          Identifier(mapName(s"$name$index", category = Namespace.Var))
+          Identifier(mapName((name, index), category = Namespace.Var))
       }
     case Free(name, typ) =>
       defaultAllBut match {
         case Some((_, frees)) if !frees.contains(name) =>
-          TypeConstraint(Identifier("default"), translateTyp(typ))
+          Comment(name, TypeConstraint(Identifier("default"), translateTyp(typ)))
         case _ =>
           Identifier(mapName(name, category = Namespace.Free))
       }
@@ -127,12 +127,14 @@ object Main {
     case Type("fun", _*) => throw new RuntimeException("should not happen")
     case Type(tcon, typs@_*) => Application(Identifier(mapName(tcon, category = Namespace.TypeCon)),
       typs.map(translateTyp) :_*)
-    case TVar(name, index, sort) => Identifier(mapName(name + index, category = Namespace.TVar))
+    case TVar(name, index, sort) => Identifier(mapName((name, index), category = Namespace.TVar))
     case TFree(name, sort) => Identifier(mapName(name, category = Namespace.TFree))
   }
 
   val preamble: String =
-    """def prop := Prop
+    """set_option linter.unusedVariables false
+      |
+      |def prop := Prop
       |def Pure_imp x y := x -> y
       |def Pure_eq {a: Type} (x y : a) := x = y
       |def Pure_all {_a0 : Type} (f: _a0 -> prop) := ∀x, f x
@@ -150,6 +152,8 @@ object Main {
       |axiom Int_int : Type
       |instance inhabited_HOL_bool: Inhabited HOL_bool := Inhabited.mk true
       |instance inhabited_Set_set a [Inhabited a] : Inhabited (Set_set a) := sorry
+      |instance inhabited_Prop: Inhabited prop := Inhabited.mk True
+      |instance inhabited_Nat_nat: Inhabited Nat_nat := sorry
       |
       |""".stripMargin
 
