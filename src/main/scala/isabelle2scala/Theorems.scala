@@ -46,28 +46,10 @@ object Theorems {
   }
 
   def actuallyCompute(pthm: PThm): Theorem = {
-    println(s"Computing: ${pthm.header.name}@${pthm.header.serial}")
-    println(s"  Proposition: ${pthm.header.prop.pretty(ctxt)}")
-    val proof = pthm.fullProof(ctxt.theoryOf)
-    println(s"  Proof: ${proofToString(proof)}")
-    isabelle2scala.Theorem(pthm = pthm)
+    val theorem = Theorem(pthm = pthm)
+    theorem.print(Globals.output)
+    println(s"Printed theorem ${theorem.name}: ${theorem.prop.pretty(ctxt)}")
+    theorem
   }
 
-  def proofToString(proof: Proofterm): String = proof match {
-    case Proofterm.MinProof => "_"
-    case Proofterm.AppP(proof1, proof2) => s"AppP(${proofToString(proof1)},${proofToString(proof2)})"
-    case Proofterm.Appt(proof, term) => s"Appt(${proofToString(proof)}, ${term.map(_.pretty(ctxt))}"
-    case Proofterm.AbsP(name, term, proof) => s"AbsP($name, ${term.map(_.pretty(ctxt))}, ${proofToString(proof)}"
-    case Proofterm.Abst(name, typ, proof) => s"Abst($name, ${typ.map(_.pretty(ctxt))}, ${proofToString(proof)}"
-    case Proofterm.Hyp(term) => s"Hyp(${term.pretty(ctxt)}"
-    case Proofterm.PAxm(name, prop, typ) =>
-      val axiom = Axioms.compute(name, prop)
-      s"$axiom(${typ.map(_.map(_.pretty(ctxt)))})"
-    case Proofterm.PBound(index) => s"PBound($index)"
-    case Proofterm.OfClass(typ, clazz) => s"OfClass(${typ.pretty(ctxt)}, $clazz)"
-    case Proofterm.Oracle(name, term, typ) => s"Oracle($name, ${term.pretty(ctxt)}, ${typ.map(_.map(_.pretty(ctxt)))}"
-    case pthm: PThm =>
-      val theorem = Theorems.compute(pthm)
-      theorem.toString
-  }
 }

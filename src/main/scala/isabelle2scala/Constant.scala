@@ -17,7 +17,7 @@ case class Constant(name: String) extends LogicalEntity {
 
   private val nameMap = mutable.HashMap[String, Constant]()
 
-  val fullName: String = Naming.quote(name = name, category = Namespace.Constant)
+  val fullName: String = Naming.mapName(name = name, category = Namespace.Constant)
 
   // TODO get correct type
   val typ: Typ = IsabelleOps.theConstType(Globals.thy, name).retrieveNow
@@ -30,7 +30,7 @@ case class Constant(name: String) extends LogicalEntity {
   def print(output: PrintWriter): Unit = {
     val typString = Main.translateTyp(typ)
     val argString = typArgs map { case (name,index) =>
-      val name2 = Naming.quote(name + index, category = Namespace.TVar)
+      val name2 = Naming.mapName(name + index, category = Namespace.TVar)
       s"{$name2 : Type}"
     } mkString " "
 

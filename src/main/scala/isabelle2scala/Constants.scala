@@ -7,6 +7,11 @@ object Constants {
 
   private val nameMap = mutable.HashMap[String, Constant]()
 
+  def add(constant: Constant): Unit = {
+    assert(!nameMap.contains(constant.name))
+    nameMap.put(constant.name, constant)
+  }
+
   def compute(name: String): Constant = nameMap.get(name) match {
     case Some(constant) => constant
     case None =>
@@ -16,9 +21,9 @@ object Constants {
   }
 
   private def actuallyCompute(name: String): Constant = {
-    println(s"Computing constant: $name: $name")
     val constant = Constant(name)
     constant.print(Globals.output)
+    println(s"Printed constant: $name")
     constant
   }
 }

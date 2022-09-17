@@ -1,8 +1,12 @@
 package isabelle2scala
 
 sealed trait OutputTerm {
-  protected def maybeParens(term: OutputTerm, parens: Boolean) =
+  protected def maybeParens(term: OutputTerm, parens: Boolean): String =
     if (parens) s"($term)" else term.toString
+}
+
+case class Comment(comment: String, term: OutputTerm) extends OutputTerm {
+  override def toString: String = s"/-$comment-/ $term"
 }
 
 case class Identifier(name: String, at: Boolean = false) extends OutputTerm {

@@ -23,9 +23,9 @@ object Axioms {
   }
 
   private def actuallyCompute(name: String, prop: Term): Axiom = {
-    println(s"Computing axiom: $name: ${prop.pretty(ctxt)}")
     val axiom = isabelle2scala.Axiom(name = name, prop = prop)
     axiom.print(Globals.output)
+    println(s"Printed axiom: $name: ${prop.pretty(ctxt)}")
     axiom
   }
 }
