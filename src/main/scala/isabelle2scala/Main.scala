@@ -30,8 +30,8 @@ object Main {
   }
   
   def main(args: Array[String]): Unit = {
-    val thmName = "HOL.conjI"
-//    val thmName = "Binomial.binomial_eq_0"
+//    val thmName = "HOL.conjI"
+    val thmName = "Binomial.binomial_eq_0"
 
     val thm = Thm(ctxt, thmName)
     val pthm = getPThm(thm)

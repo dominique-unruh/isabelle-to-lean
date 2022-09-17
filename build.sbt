@@ -6,5 +6,6 @@ lazy val root = (project in file("."))
   .settings(
     name := "isabelle-to-lean",
 
-    libraryDependencies += ("de.unruh" %% "scala-isabelle" % "master-SNAPSHOT").cross(CrossVersion.for3Use2_13)
+    libraryDependencies += ("de.unruh" %% "scala-isabelle" % "master-SNAPSHOT").cross(CrossVersion.for3Use2_13),
+    libraryDependencies += "org.apache.commons" % "commons-text" % "1.9"
   )

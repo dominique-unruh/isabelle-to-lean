@@ -1,6 +1,7 @@
 package isabelle2scala
 
 sealed trait OutputTerm {
+  // TODO use ropes instead of strings
   protected def maybeParens(term: OutputTerm, parens: Boolean): String =
     if (parens) s"($term)" else term.toString
 }

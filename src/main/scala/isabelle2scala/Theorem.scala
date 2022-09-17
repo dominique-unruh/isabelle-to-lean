@@ -7,6 +7,7 @@ import Globals.ctxt
 import Globals.given
 import de.unruh.isabelle.pure.{Proofterm, Term}
 import org.apache.commons.io.filefilter.TrueFileFilter
+import org.apache.commons.text.WordUtils
 
 import scala.concurrent.ExecutionContext.Implicits.given
 
@@ -26,13 +27,10 @@ case class Theorem(pthm: PThm) extends LogicalEntity {
     val proofString = proofToString(cleanDuplicateAbsNamesProof(proof), Nil, Nil)
 
     output.println(s"-- Lemma ${name} (${pthm.header.serial}): ${prop.pretty(ctxt)}")
-    output.println(s"-- Proof: $proof")
+//    output.println(s"-- Isabelle proofterm: $proof")
     output.println(s"theorem $fullName $argString: $propString")
-    output.println(s"  := $proofString")
-    output.println()
-    output.flush()
-
-    output.println(s"-- Proof: $proofString")
+    val wrappedProofString = WordUtils.wrap(proofString.toString, 150, "\n     ", false)
+    output.println(s"  := $wrappedProofString")
     output.println()
     output.flush()
   }
