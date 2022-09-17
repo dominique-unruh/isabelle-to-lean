@@ -85,24 +85,39 @@ object Main {
 
   /** Assumption: no TVars or TFree have same name but different types
    * TODO: check this assm here */
-  def translateTermClean(term: Term, env: List[String] = Nil): OutputTerm = translateTerm(cleanDuplicateAbsNames(term, used = env.toSet), env = env)
+  def translateTermClean(term: Term, env: List[String] = Nil,
+                         defaultAllBut: Option[(Set[(String,Int)],Set[String])] = None): OutputTerm =
+    translateTerm(cleanDuplicateAbsNames(term, used = env.toSet), env = env, defaultAllBut = defaultAllBut)
 
   /** Assumptions:
    * - no TVars or TFree have same name but different types
    * - no empty names in Abs or shadowed names */
-  def translateTerm(term: Term, env: List[String]): OutputTerm = term match {
-    case App(t, u) => Application({translateTerm(t, env)}, translateTerm(u, env))
+  def translateTerm(term: Term, env: List[String],
+                    defaultAllBut: Option[(Set[(String,Int)],Set[String])]): OutputTerm = term match {
+    case App(t, u) => Application({translateTerm(t, env, defaultAllBut)}, translateTerm(u, env, defaultAllBut))
     case Abs(name, typ, term) =>
       assert(name.nonEmpty)
       val name2 = mapName(name, category = Namespace.AbsVar)
-      Abstraction(name2, translateTyp(typ), translateTerm(term, name2 :: env))
+      Abstraction(name2, translateTyp(typ), translateTerm(term, name2 :: env, defaultAllBut))
     case Bound(i) => Identifier(env(i))
-    case Var(name, index, typ) => Identifier(mapName(s"$name$index", category = Namespace.Var))
-    case Free(name, typ) => Identifier(mapName(name, category = Namespace.Free))
+    case Var(name, index, typ) =>
+      defaultAllBut match {
+        case Some((vars,_)) if !vars.contains(name,index) =>
+          TypeConstraint(Identifier("default"), translateTyp(typ))
+        case _ =>
+          Identifier(mapName(s"$name$index", category = Namespace.Var))
+      }
+    case Free(name, typ) =>
+      defaultAllBut match {
+        case Some((_, frees)) if !frees.contains(name) =>
+          TypeConstraint(Identifier("default"), translateTyp(typ))
+        case _ =>
+          Identifier(mapName(name, category = Namespace.Free))
+      }
     case Const(name, typ) =>
       val const = Constants.compute(name)
       val args = const.instantiate(typ).map(translateTyp)
-      Application(Identifier(const.fullName, at = true), args :_*)
+      Application(Identifier(const.fullName, at = true), args: _*)
   }
 
   /** Assumptions: no TVars or TFree have same name but different types */
@@ -133,6 +148,8 @@ object Main {
       |axiom Product_Type_prod : Type -> Type -> Type
       |axiom Num_num_num_IITN_num : Type
       |axiom Int_int : Type
+      |instance inhabited_HOL_bool: Inhabited HOL_bool := Inhabited.mk true
+      |instance inhabited_Set_set a [Inhabited a] : Inhabited (Set_set a) := sorry
       |
       |""".stripMargin
 

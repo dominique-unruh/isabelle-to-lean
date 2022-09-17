@@ -52,8 +52,10 @@ object Application {
 }
 
 case class Abstraction(variable: String, typ: OutputTerm, body: OutputTerm) extends OutputTerm {
-  override def toCord: Cord =
-    cord"fun ${TypeConstraint(Identifier(variable), typ).toCord} => $body"
+  override def toCord: Cord = {
+    val bodyNoParens = body.isInstanceOf[Identifier] || body.isInstanceOf[Application] || body.isInstanceOf[Abstraction]
+    cord"fun ${TypeConstraint(Identifier(variable), typ).toCord} => ${maybeParens(body, !bodyNoParens)}"
+  }
 }
 
 case class FunType(inType: OutputTerm, outType: OutputTerm) extends OutputTerm {

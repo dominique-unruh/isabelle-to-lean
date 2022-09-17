@@ -10,6 +10,9 @@ import org.apache.commons.io.filefilter.TrueFileFilter
 import org.apache.commons.text.WordUtils
 
 import scala.concurrent.ExecutionContext.Implicits.given
+import de.unruh.isabelle.pure.Implicits.given
+import de.unruh.isabelle.mlvalue.Implicits.given
+import isabelle2scala.Theorem.{Env, proofToString}
 
 //noinspection UnstableApiUsage
 case class Theorem(pthm: PThm) extends LogicalEntity {
@@ -23,7 +26,12 @@ case class Theorem(pthm: PThm) extends LogicalEntity {
     val argString = Main.argumentsOfProp(prop)
     val propString = Main.translateTermClean(prop)
     val proof = this.proof
-    val proofString = proofToString(cleanDuplicateAbsNamesProof(proof), Nil, Nil)
+
+    val vars = IsabelleOps.addVars(prop).retrieveNow.reverse.map(_._1)
+    val frees = IsabelleOps.addFrees(prop).retrieveNow.reverse.map(_._1)
+    val env = Env(boundFree = frees.toSet, boundVar = vars.toSet)
+
+    val proofString = proofToString(cleanDuplicateAbsNamesProof(proof), env)
 
     output.println(s"-- Lemma ${name} (${pthm.header.serial}): ${prop.pretty(ctxt)}")
 //    output.println(s"-- Isabelle proofterm: $proof")
@@ -80,37 +88,47 @@ case class Theorem(pthm: PThm) extends LogicalEntity {
   def prop: Term = pthm.header.prop
 
   def name: String = pthm.header.name
+}
+
+//noinspection UnstableApiUsage
+object Theorem {
+  case class Env(propEnv: List[String] = Nil, termEnv: List[String] = Nil,
+                 boundFree: Set[String] = Set.empty, boundVar: Set[(String, Int)] = Set.empty)
+  object Env {
+//    val empty: Env = Env(Nil, Nil, Set.empty, Set.empty)
+  }
 
   /** Assumption: All names in AbsP are non-empty and no shadowing */
-  def proofToString(proof: Proofterm, propEnv: List[String] = Nil, termEnv: List[String]): OutputTerm = {
+  def proofToString(proof: Proofterm, env: Env): OutputTerm = {
     proof match {
       case Proofterm.MinProof =>
         throw new RuntimeException("MinProof")
       case Proofterm.AppP(proof1, proof2) =>
-        Application(proofToString(proof1, propEnv, termEnv), proofToString(proof2, propEnv, termEnv))
+        Application(proofToString(proof1, env), proofToString(proof2, env))
       case Proofterm.Appt(proof, term) =>
         assert(term.nonEmpty)
-        // TODO: unbounded free/var in term: replace by "default : <typ>"
-        Application(proofToString(proof, propEnv, termEnv), Main.translateTermClean(term.get, env = termEnv))
+        Application(proofToString(proof, env),
+          Main.translateTermClean(term.get, env = env.termEnv, defaultAllBut = Some((env.boundVar, env.boundFree))))
       case Proofterm.AbsP(name, term, proof) =>
         assert(term.nonEmpty)
         assert(name.nonEmpty)
         val name2 = Naming.mapName(name, category = Namespace.ProofAbsVar)
-        // TODO: unbounded free/var in term: replace by "default : <typ>"
-        Abstraction(name2, Main.translateTermClean(term.get, env = termEnv), proofToString(proof, name2 :: propEnv, termEnv))
+        Abstraction(name2,
+          Main.translateTermClean(term.get, env = env.termEnv, defaultAllBut = Some((env.boundVar, env.boundFree))),
+          proofToString(proof, env.copy(propEnv = name2 :: env.propEnv)))
       case Proofterm.Abst(name, typ, proof) =>
         assert(typ.nonEmpty)
         assert(name.nonEmpty)
         val name2 = Naming.mapName(name, category = Namespace.ProofAbsVarTerm)
-        Abstraction(name2, Main.translateTyp(typ.get), proofToString(proof, propEnv, name2 :: termEnv))
+        Abstraction(name2, Main.translateTyp(typ.get), proofToString(proof, env.copy(termEnv = name2 :: env.termEnv)))
       case Proofterm.Hyp(term) =>
         ???
       case Proofterm.PAxm(name, prop, typ) =>
         val axiom = Axioms.compute(name, prop)
         assert(typ.nonEmpty)
-        Application(Identifier(axiom.fullName, at = true), typ.get.map(Main.translateTyp) :_*)
+        Application(Identifier(axiom.fullName, at = true), typ.get.map(Main.translateTyp): _*)
       case Proofterm.PBound(index) =>
-        Identifier(propEnv(index))
+        Identifier(env.propEnv(index))
       case Proofterm.OfClass(typ, clazz) =>
         ???
       case Proofterm.Oracle(name, term, typ) =>
@@ -119,7 +137,7 @@ case class Theorem(pthm: PThm) extends LogicalEntity {
         val theorem = Theorems.compute(pthm)
         assert(pthm.header.types.nonEmpty)
         val types = pthm.header.types.get.map(Main.translateTyp)
-        Comment(s"${pthm.header.types.get.map(_.pretty(ctxt))}", Application(Identifier(theorem.fullName, at = true), types :_*))
+        Comment(s"${pthm.header.types.get.map(_.pretty(ctxt))}", Application(Identifier(theorem.fullName, at = true), types: _*))
     }
   }
 }
