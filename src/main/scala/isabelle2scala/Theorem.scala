@@ -142,7 +142,7 @@ object Theorem {
         val theorem = Theorems.compute(pthm)
         assert(pthm.header.types.nonEmpty)
         val types = pthm.header.types.get.map(Main.translateTyp)
-        Comment(s"${pthm.header.types.get.map(_.pretty(ctxt))}", Application(Identifier(theorem.fullName, at = true), intersperseWildcards(types): _*))
+        Application(Identifier(theorem.fullName, at = true), intersperseWildcards(types): _*)
     }
   }
 }

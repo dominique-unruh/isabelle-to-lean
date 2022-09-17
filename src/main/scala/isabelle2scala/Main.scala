@@ -57,8 +57,8 @@ object Main {
   def argumentsOfProp(prop: Term): String = {
     val vars = IsabelleOps.addVars(prop).retrieveNow.reverse
     val frees = IsabelleOps.addFrees(prop).retrieveNow.reverse
-    if (frees.nonEmpty)
-      System.err.println(s"Warning: nonempty frees, not sure how to handle this: ${prop.pretty(ctxt)}")
+//    if frees.nonEmpty && vars.nonEmpty then
+//      System.err.println(s"Warning: nonempty vars and frees, not sure how to handle this: ${prop.pretty(ctxt)}")
     val tfrees = IsabelleOps.addTFrees(prop).retrieveNow.reverse
     val tvars = IsabelleOps.addTVars(prop).retrieveNow.reverse
     assert(tfrees.isEmpty)
@@ -77,10 +77,10 @@ object Main {
 
     val frees2 = frees map { case (name, typ) =>
       val name2 = mapName(name, category = Namespace.Free)
-      s"(/-FREE-/ $name2 : ${translateTyp(typ)})"
+      s"($name2 : ${translateTyp(typ)})"
     }
 
-    (targs ++ vars2 ++ frees2).mkString(" ")
+    (targs ++ frees2 ++ vars2).mkString(" ")
   }
 
   /** Assumption: no TVars or TFree have same name but different types
