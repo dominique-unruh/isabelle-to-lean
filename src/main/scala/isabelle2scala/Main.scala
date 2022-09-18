@@ -63,11 +63,10 @@ object Main {
     val tvars = IsabelleOps.addTVars(prop).retrieveNow.reverse
     assert(tfrees.isEmpty)
 
-    // TODO add [Inhabited <var>] for each tvar
     val targs = tvars map { case ((name, index), sort) =>
       // TODO: don't ignore sort!
       val name2 = mapName((name, index), category = Namespace.TVar)
-      s"{$name2 : Type} [Inhabited $name2]"
+      s"{$name2 : Type} [Nonempty $name2]"
     }
 
     val vars2 = vars map { case ((name, index), typ) =>
@@ -103,14 +102,14 @@ object Main {
     case Var(name, index, typ) =>
       defaultAllBut match {
         case Some((vars,_)) if !vars.contains(name,index) =>
-          Comment(s"?$name.$index", TypeConstraint(Identifier("default"), translateTyp(typ)))
+          Comment(s"?$name.$index", TypeConstraint(Identifier("Classical.ofNonempty"), translateTyp(typ)))
         case _ =>
           Identifier(mapName((name, index), category = Namespace.Var))
       }
     case Free(name, typ) =>
       defaultAllBut match {
         case Some((_, frees)) if !frees.contains(name) =>
-          Comment(name, TypeConstraint(Identifier("default"), translateTyp(typ)))
+          Comment(name, TypeConstraint(Identifier("Classical.ofNonempty"), translateTyp(typ)))
         case _ =>
           Identifier(mapName(name, category = Namespace.Free))
       }
@@ -141,8 +140,8 @@ object Main {
       |-- def Pure_prop (x: Prop) := x
       |def HOL_bool := Bool
       |axiom itself (a: Type) : Type
-      |axiom Nat_nat : Type
-      |axiom Set_set : Type -> Type
+      |def Nat_nat := Nat
+      |def Set_set a := a -> Bool
       |axiom Nat_ind : Type
       |axiom Num_num : Type
       |axiom Sum_Type_sum : Type -> Type -> Type
@@ -150,10 +149,11 @@ object Main {
       |axiom Product_Type_prod : Type -> Type -> Type
       |axiom Num_num_num_IITN_num : Type
       |axiom Int_int : Type
-      |instance inhabited_HOL_bool: Inhabited HOL_bool := Inhabited.mk true
-      |instance inhabited_Set_set a [Inhabited a] : Inhabited (Set_set a) := sorry
-      |instance inhabited_Prop: Inhabited prop := Inhabited.mk True
-      |instance inhabited_Nat_nat: Inhabited Nat_nat := sorry
+      |instance nonempty_HOL_bool: Nonempty HOL_bool := Nonempty.intro true
+      |instance nonempty_Set_set a [Nonempty a] : Nonempty (Set_set a) :=
+      |  Nonempty.intro fun _ => false
+      |instance nonempty_Prop: Nonempty prop := Nonempty.intro True
+      |instance nonempty_Nat_nat: Nonempty Nat_nat := Nonempty.intro (0 : Nat)
       |
       |""".stripMargin
 

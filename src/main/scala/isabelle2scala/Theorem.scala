@@ -30,6 +30,7 @@ case class Theorem(pthm: PThm) extends LogicalEntity {
     val propString = Main.translateTermClean(prop)
     val proof = this.proof
 
+    // TODO: this is duplication, argumentsOfProp already scans for vars/frees
     val vars = IsabelleOps.addVars(prop).retrieveNow.reverse.map(_._1)
     val frees = IsabelleOps.addFrees(prop).retrieveNow.reverse.map(_._1)
     val env = Env(boundFree = frees.toSet, boundVar = vars.toSet)
