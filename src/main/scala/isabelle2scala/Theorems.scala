@@ -23,10 +23,10 @@ object Theorems {
   private val nameMap = new ConcurrentHashMap[String, Future[Theorem]]()
 
   def compute(pthm: PThm): Future[Theorem] =
-    serialMap.computeIfAbsent(pthm.header.serial, { _ =>
+    serialMap.computeIfAbsent(pthm.header.serial, { _ => Future { // Putting inside a future here to avoid "Recursive update" error
       val theorem = actuallyCompute(pthm)
       addToNameMap(pthm, theorem)
-      theorem})
+      theorem}.flatten })
 
   private def addToNameMap(pthm: Proofterm.PThm, eventualTheorem: Future[Theorem]): Future[Unit] = Future {
     if (pthm.header.name != "") {
@@ -47,11 +47,10 @@ object Theorems {
       Future.unit
   }
 
-  def actuallyCompute(pthm: PThm): Future[Theorem] = Future {
+  def actuallyCompute(pthm: PThm): Future[Theorem] = {
     val theorem = Theorem(pthm = pthm)
-    theorem.print(Globals.output)
-    println(s"Printed theorem ${theorem.name}: ${theorem.prop.pretty(ctxt)}")
-    theorem
+    for (_ <- theorem.print(Globals.output);
+         _ = println(s"Printed theorem ${theorem.name}: ${theorem.prop.pretty(ctxt)}"))
+    yield theorem
   }
-
 }

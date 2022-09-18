@@ -13,7 +13,7 @@ import de.unruh.isabelle.mlvalue.Implicits.given
 import isabelle2scala.Theorem.{Env, proofToString}
 import org.checkerframework.dataflow.qual.Pure
 
-import scala.concurrent.{Await, blocking}
+import scala.concurrent.{Await, Future, blocking}
 import scala.concurrent.duration.Duration
 
 //noinspection UnstableApiUsage
@@ -27,7 +27,7 @@ case class Theorem(pthm: PThm) extends LogicalEntity {
 
   def proof: Proofterm = pthm.fullProof(ctxt.theoryOf)
 
-  def print(output: PrintWriter): Unit = {
+  def print(output: PrintWriter): Future[Unit] = {
     val argString = Main.argumentsOfProp(prop)
     val propString = Main.translateTermClean(prop)
     val proof = this.proof
@@ -37,16 +37,16 @@ case class Theorem(pthm: PThm) extends LogicalEntity {
     val frees = IsabelleOps.addFrees(prop).retrieveNow.reverse.map(_._1)
     val env = Env(boundFree = frees.toSet, boundVar = vars.toSet)
 
-    val proofString = proofToString(cleanDuplicateAbsNamesProof(proof), env)
-
-    output.synchronized {
-      output.println(s"-- Lemma ${name} (${pthm.header.serial}): ${prop.pretty(ctxt)}")
-      output.println(s"theorem $fullName $argString: $propString")
-      val wrappedProofString = WordUtils.wrap(proofString.toString, 150, "\n     ", false)
-      output.println(s"  := $wrappedProofString")
-      output.println()
-      output.flush()
-    }
+    for (proofString <- proofToString(cleanDuplicateAbsNamesProof(proof), env))
+      yield output.synchronized {
+        output.println(s"-- Lemma ${name} (${pthm.header.serial}): ${prop.pretty(ctxt)}")
+        output.println(s"theorem $fullName $argString:")
+        output.println(s"  $propString")
+        val wrappedProofString = WordUtils.wrap(proofString.toString, 150, "\n     ", false)
+        output.println(s"  := $wrappedProofString")
+        output.println()
+        output.flush()
+      }
   }
 
   def cleanDuplicateAbsNamesProof(proof: Proofterm, used: Set[String] = Set.empty): Proofterm = {
@@ -104,47 +104,53 @@ object Theorem {
 
   /** Assumption: All names in AbsP are non-empty and no shadowing */
   // TODO: Use futures
-  def proofToString(proof: Proofterm, env: Env): OutputTerm = {
+  def proofToString(proof: Proofterm, env: Env): Future[OutputTerm] = {
     def intersperseWildcards(terms: Seq[OutputTerm]): Seq[OutputTerm] = terms.flatMap(t => Seq(t, Wildcard))
 
     proof match {
       case Proofterm.MinProof =>
         throw new RuntimeException("MinProof")
       case Proofterm.AppP(proof1, proof2) =>
-        Application(proofToString(proof1, env), proofToString(proof2, env))
+        val out1future = proofToString(proof1, env)
+        val out2future = proofToString(proof2, env)
+        for (out1 <- out1future;
+             out2 <- out2future)
+        yield Application(out1, out2)
       case Proofterm.Appt(proof, term) =>
         assert(term.nonEmpty)
-        Application(proofToString(proof, env),
-          Main.translateTermClean(term.get, env = env.termEnv, defaultAllBut = Some((env.boundVar, env.boundFree))))
+        for (out <- proofToString(proof, env))
+          yield Application(out,
+            Main.translateTermClean(term.get, env = env.termEnv, defaultAllBut = Some((env.boundVar, env.boundFree))))
       case Proofterm.AbsP(name, term, proof) =>
         assert(term.nonEmpty)
         assert(name.nonEmpty)
         val name2 = Naming.mapName(name, category = Namespace.ProofAbsVar)
-        Abstraction(name2,
-          Main.translateTermClean(term.get, env = env.termEnv, defaultAllBut = Some((env.boundVar, env.boundFree))),
-          proofToString(proof, env.copy(propEnv = name2 :: env.propEnv)))
+        for (out <- proofToString(proof, env.copy(propEnv = name2 :: env.propEnv)))
+          yield Abstraction(name2,
+            Main.translateTermClean(term.get, env = env.termEnv, defaultAllBut = Some((env.boundVar, env.boundFree))), out)
       case Proofterm.Abst(name, typ, proof) =>
         assert(typ.nonEmpty)
         assert(name.nonEmpty)
         val name2 = Naming.mapName(name, category = Namespace.ProofAbsVarTerm)
-        Abstraction(name2, Main.translateTyp(typ.get), proofToString(proof, env.copy(termEnv = name2 :: env.termEnv)))
+        for (out <- proofToString(proof, env.copy(termEnv = name2 :: env.termEnv)))
+          yield Abstraction(name2, Main.translateTyp(typ.get), out)
       case Proofterm.Hyp(term) =>
         ???
       case Proofterm.PAxm(name, prop, typ) =>
         val axiom = Axioms.compute(name, prop)
         assert(typ.nonEmpty)
-        Application(Identifier(axiom.fullName, at = true), intersperseWildcards(typ.get.map(Main.translateTyp)): _*)
+        Future.successful(Application(Identifier(axiom.fullName, at = true), intersperseWildcards(typ.get.map(Main.translateTyp)): _*))
       case Proofterm.PBound(index) =>
-        Identifier(env.propEnv(index))
+        Future.successful(Identifier(env.propEnv(index)))
       case Proofterm.OfClass(typ, clazz) =>
         ???
       case Proofterm.Oracle(name, term, typ) =>
         ???
       case pthm: PThm =>
-        val theorem = blocking { Await.result(Theorems.compute(pthm), Duration.Inf) }
         assert(pthm.header.types.nonEmpty)
         val types = pthm.header.types.get.map(Main.translateTyp)
-        Application(Identifier(theorem.fullName, at = true), intersperseWildcards(types): _*)
+        for (theorem <- Theorems.compute(pthm))
+          yield Application(Identifier(theorem.fullName, at = true), intersperseWildcards(types): _*)
     }
   }
 }
