@@ -150,7 +150,7 @@ object Main {
       |axiom Num_num_num_IITN_num : Type
       |axiom Int_int : Type
       |instance nonempty_HOL_bool: Nonempty HOL_bool := Nonempty.intro true
-      |instance nonempty_Set_set a [Nonempty a] : Nonempty (Set_set a) :=
+      |instance nonempty_Set_set a : Nonempty (Set_set a) :=
       |  Nonempty.intro fun _ => false
       |instance nonempty_Prop: Nonempty prop := Nonempty.intro True
       |instance nonempty_Nat_nat: Nonempty Nat_nat := Nonempty.intro (0 : Nat)
