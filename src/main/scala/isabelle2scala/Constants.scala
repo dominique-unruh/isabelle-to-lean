@@ -1,24 +1,19 @@
 package isabelle2scala
 
+import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable
 
 object Constants {
   def count: Int = nameMap.size
 
-  private val nameMap = mutable.HashMap[String, Constant]()
+  private val nameMap = new ConcurrentHashMap[String, Constant]()
 
-  def add(constant: Constant): Unit = {
-    assert(!nameMap.contains(constant.name))
-    nameMap.put(constant.name, constant)
-  }
+  def add(constant: Constant): Unit =
+    if (nameMap.putIfAbsent(constant.name, constant) != null)
+      throw new RuntimeException("Double add")
 
-  def compute(name: String): Constant = nameMap.get(name) match {
-    case Some(constant) => constant
-    case None =>
-      val constant = actuallyCompute(name)
-      nameMap.put(name, constant)
-      constant
-  }
+  def compute(name: String): Constant =
+    nameMap.computeIfAbsent(name, _ => actuallyCompute(name))
 
   private def actuallyCompute(name: String): Constant = {
     val constant = Constant(name)

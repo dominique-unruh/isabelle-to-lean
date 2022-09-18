@@ -5,7 +5,6 @@ import de.unruh.isabelle.pure.Term
 import java.io.PrintWriter
 import Globals.ctxt
 
-import concurrent.ExecutionContext.Implicits.given
 import Globals.given
 
 case class Axiom(name: String, prop: Term) extends LogicalEntity {
@@ -16,9 +15,11 @@ case class Axiom(name: String, prop: Term) extends LogicalEntity {
   def print(output: PrintWriter): Unit = {
     val argString = Main.argumentsOfProp(prop)
     val propString = Main.translateTermClean(prop)
-    output.println(s"-- Axiom $name: ${prop.pretty(ctxt)}")
-    output.println(s"axiom $fullName $argString: $propString")
-    output.println()
-    output.flush()
+    output.synchronized {
+      output.println(s"-- Axiom $name: ${prop.pretty(ctxt)}")
+      output.println(s"axiom $fullName $argString: $propString")
+      output.println()
+      output.flush()
+    }
   }
 }

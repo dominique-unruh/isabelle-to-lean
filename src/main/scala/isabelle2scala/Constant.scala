@@ -7,7 +7,6 @@ import java.io.PrintWriter
 import scala.collection.mutable
 import Globals.given
 
-import concurrent.ExecutionContext.Implicits.given
 import de.unruh.isabelle.mlvalue.Implicits.given
 import de.unruh.isabelle.mlvalue.MLValue
 import de.unruh.isabelle.pure.Implicits.given
@@ -15,12 +14,13 @@ import de.unruh.isabelle.pure.Implicits.given
 case class Constant(name: String) extends LogicalEntity {
   override def toString: String = s"Const($name)"
 
-  private val nameMap = mutable.HashMap[String, Constant]()
+//  private val nameMap = mutable.HashMap[String, Constant]()
 
   val fullName: String = Naming.mapName(name = name, category = Namespace.Constant)
 
-  // TODO get correct type
+  // TODO future
   val typ: Typ = IsabelleOps.theConstType(Globals.thy, name).retrieveNow
+  // TODO future
   val typArgs: List[(String, Int)] = IsabelleOps.constTypargs(Globals.thy, name, typ).retrieveNow map {
     case TVar(name, index, sort) =>
 //      assert(sort.isEmpty, sort)
@@ -34,9 +34,11 @@ case class Constant(name: String) extends LogicalEntity {
       s"{$name2 : Type}"
     } mkString " "
 
-    output.println(s"-- Constant $name :: ${typ.pretty(ctxt)}")
-    output.println(s"axiom $fullName $argString: $typString")
-    output.println()
+    output.synchronized {
+      output.println(s"-- Constant $name :: ${typ.pretty(ctxt)}")
+      output.println(s"axiom $fullName $argString: $typString")
+      output.println()
+    }
   }
 
   def instantiate(typ: Typ): List[Typ] =

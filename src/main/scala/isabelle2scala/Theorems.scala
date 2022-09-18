@@ -3,10 +3,13 @@ package isabelle2scala
 import de.unruh.isabelle.pure.Proofterm.PThm
 import Globals.ctxt
 import de.unruh.isabelle.pure.Proofterm
-import scala.collection.mutable
 
-import scala.concurrent.ExecutionContext.Implicits.given
+import scala.collection.mutable
 import Globals.given
+
+import java.util.concurrent.ConcurrentHashMap
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future, blocking}
 
 //noinspection UnstableApiUsage
 object Theorems {
@@ -16,36 +19,35 @@ object Theorems {
 
   def namedCount: Int = nameMap.size
 
-  private val serialMap = mutable.HashMap[Serial, Theorem]()
-  private val nameMap = mutable.HashMap[String, Serial]()
+  private val serialMap = new ConcurrentHashMap[Serial, Future[Theorem]]()
+  private val nameMap = new ConcurrentHashMap[String, Future[Theorem]]()
 
-  def compute(pthm: PThm): Theorem = serialMap.get(pthm.header.serial) match {
-    case Some(theorem) => theorem
-    case None =>
+  def compute(pthm: PThm): Future[Theorem] =
+    serialMap.computeIfAbsent(pthm.header.serial, { _ =>
       val theorem = actuallyCompute(pthm)
-      serialMap.put(pthm.header.serial, theorem) match {
-        case None =>
-        case Some(_) =>
-          throw new RuntimeException("serial already there")
-      }
-      if (pthm.header.name != "") {
-        nameMap.get(pthm.header.name) match {
-          case Some(old) =>
-            val oldProp = serialMap(old).pthm.header.prop
-            val prop = pthm.header.prop
-            println(s"*** isabelle2scala.Theorem ${pthm.header.name} already encountered ***")
-            println(s"  $old: ${oldProp.pretty(ctxt)}")
-            println(s"  ${pthm.header.serial}: ${prop.pretty(ctxt)}")
-            if (prop != oldProp)
-              println("  Propositions differ!")
-          case None =>
-            nameMap.put(pthm.header.name, pthm.header.serial)
+      addToNameMap(pthm, theorem)
+      theorem})
+
+  private def addToNameMap(pthm: Proofterm.PThm, eventualTheorem: Future[Theorem]): Future[Unit] = Future {
+    if (pthm.header.name != "") {
+      val old = nameMap.putIfAbsent(pthm.header.name, eventualTheorem)
+      if (old != null)
+        for (oldTheorem <- old) {
+          val oldProp = oldTheorem.pthm.header.prop
+          val prop = pthm.header.prop
+          println(s"*** Theorem ${pthm.header.name} already encountered ***")
+          println(s"  $old: ${oldProp.pretty(ctxt)}")
+          println(s"  ${pthm.header.serial}: ${prop.pretty(ctxt)}")
+          if (prop != oldProp)
+            println("  Propositions differ!")
         }
-      }
-      theorem
+      else
+        Future.unit
+    } else
+      Future.unit
   }
 
-  def actuallyCompute(pthm: PThm): Theorem = {
+  def actuallyCompute(pthm: PThm): Future[Theorem] = Future {
     val theorem = Theorem(pthm = pthm)
     theorem.print(Globals.output)
     println(s"Printed theorem ${theorem.name}: ${theorem.prop.pretty(ctxt)}")

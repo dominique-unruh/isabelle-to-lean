@@ -3,7 +3,6 @@ package isabelle2scala
 import de.unruh.isabelle.mlvalue.MLValue.compileFunction
 import de.unruh.isabelle.pure.{Term, Theory, Typ}
 
-import concurrent.ExecutionContext.Implicits.given
 import de.unruh.isabelle.pure.Implicits.given
 import de.unruh.isabelle.mlvalue.Implicits.given
 import Globals.given

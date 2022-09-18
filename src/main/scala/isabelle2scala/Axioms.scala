@@ -2,25 +2,19 @@ package isabelle2scala
 
 import de.unruh.isabelle.pure.Term
 import Globals.ctxt
-import scala.collection.mutable
 
+import scala.collection.mutable
 import Globals.given
-import scala.concurrent.ExecutionContext.Implicits.given
+
+import java.util.concurrent.ConcurrentHashMap
 
 object Axioms {
   def count: Int = nameMap.size
 
-  private val nameMap = mutable.HashMap[String, Axiom]()
+  private val nameMap = new ConcurrentHashMap[String, Axiom]()
 
-  def compute(name: String, prop: Term): Axiom = nameMap.get(name) match {
-    case Some(axiom) =>
-      assert(prop == axiom.prop)
-      axiom
-    case None =>
-      val axiom = actuallyCompute(name, prop)
-      nameMap.put(name, axiom)
-      axiom
-  }
+  def compute(name: String, prop: Term): Axiom =
+    nameMap.computeIfAbsent(name, _ => actuallyCompute(name, prop))
 
   private def actuallyCompute(name: String, prop: Term): Axiom = {
     val axiom = isabelle2scala.Axiom(name = name, prop = prop)

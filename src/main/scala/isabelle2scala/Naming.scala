@@ -1,13 +1,15 @@
 package isabelle2scala
 
+import java.util.concurrent.ConcurrentHashMap
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.runtime.BoxedUnit
 import scala.util.control.Breaks
 
 object Naming {
-  private val names = new mutable.HashMap[(Namespace, String | (String, Long)), String]()
-  private val assigned = new mutable.HashSet[String]()
-
+  private val names = new ConcurrentHashMap[(Namespace, String | (String, Long)), String]()
+  /** Synchronization via `this` */
+  private val assigned = new ConcurrentHashMap[String, BoxedUnit]()
 
   def letterlike(c: Char): Boolean = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
     || greek(c) || coptic(c) || letterlikeSymbols(c)
@@ -37,8 +39,10 @@ object Naming {
 
   private def bigIntZero = BigInt(0)
   private def splitNameRegex = raw"(.*[^0-9])([0-9]*)".r
-  def findUnusedName(name: String): String =
-    if (!assigned.contains(name))
+
+  private def findUnusedName(name: String): String = {
+    val previous = assigned.putIfAbsent(name, BoxedUnit.UNIT)
+    if (previous == null)
       name
     else {
       val (name1: String, index: BigInt) = name match {
@@ -50,22 +54,22 @@ object Naming {
       @tailrec def find(i: BigInt): String = {
         val j = i + 1
         val name = name1 + j
-        if (!assigned.contains(name))
+        val previous = assigned.putIfAbsent(name, BoxedUnit.UNIT)
+        if (previous == null)
           name
         else
           find(j)
       }
       find(index)
     }
-
+  }
 
   def mapName(name: String | (String, Long),
               prefix: String = "",
               suggestion: String = "",
-              category: Namespace): String = names.get((category, name)) match {
-    case Some(mappedName) => mappedName
-    case None =>
-      var rawName =
+              category: Namespace): String =
+    names.computeIfAbsent((category, name), { _ =>
+      val rawName =
         if (suggestion.nonEmpty)
           suggestion
         else
@@ -75,11 +79,7 @@ object Naming {
           }
 
       val sanitizedName = sanitizeName(rawName)
-
       val mappedName = findUnusedName(sanitizedName)
-
-      names.put((category, name), mappedName)
-      assigned.add(mappedName)
       mappedName
-  }
+    })
 }

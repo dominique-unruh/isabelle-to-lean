@@ -8,11 +8,13 @@ import Globals.given
 import de.unruh.isabelle.pure.{Proofterm, Term}
 import org.apache.commons.io.filefilter.TrueFileFilter
 import org.apache.commons.text.WordUtils
-
-import scala.concurrent.ExecutionContext.Implicits.given
 import de.unruh.isabelle.pure.Implicits.given
 import de.unruh.isabelle.mlvalue.Implicits.given
 import isabelle2scala.Theorem.{Env, proofToString}
+import org.checkerframework.dataflow.qual.Pure
+
+import scala.concurrent.{Await, blocking}
+import scala.concurrent.duration.Duration
 
 //noinspection UnstableApiUsage
 case class Theorem(pthm: PThm) extends LogicalEntity {
@@ -37,13 +39,14 @@ case class Theorem(pthm: PThm) extends LogicalEntity {
 
     val proofString = proofToString(cleanDuplicateAbsNamesProof(proof), env)
 
-    output.println(s"-- Lemma ${name} (${pthm.header.serial}): ${prop.pretty(ctxt)}")
-//    output.println(s"-- Isabelle proofterm: $proof")
-    output.println(s"theorem $fullName $argString: $propString")
-    val wrappedProofString = WordUtils.wrap(proofString.toString, 150, "\n     ", false)
-    output.println(s"  := $wrappedProofString")
-    output.println()
-    output.flush()
+    output.synchronized {
+      output.println(s"-- Lemma ${name} (${pthm.header.serial}): ${prop.pretty(ctxt)}")
+      output.println(s"theorem $fullName $argString: $propString")
+      val wrappedProofString = WordUtils.wrap(proofString.toString, 150, "\n     ", false)
+      output.println(s"  := $wrappedProofString")
+      output.println()
+      output.flush()
+    }
   }
 
   def cleanDuplicateAbsNamesProof(proof: Proofterm, used: Set[String] = Set.empty): Proofterm = {
@@ -98,11 +101,9 @@ case class Theorem(pthm: PThm) extends LogicalEntity {
 object Theorem {
   case class Env(propEnv: List[String] = Nil, termEnv: List[String] = Nil,
                  boundFree: Set[String] = Set.empty, boundVar: Set[(String, Int)] = Set.empty)
-  object Env {
-//    val empty: Env = Env(Nil, Nil, Set.empty, Set.empty)
-  }
 
   /** Assumption: All names in AbsP are non-empty and no shadowing */
+  // TODO: Use futures
   def proofToString(proof: Proofterm, env: Env): OutputTerm = {
     def intersperseWildcards(terms: Seq[OutputTerm]): Seq[OutputTerm] = terms.flatMap(t => Seq(t, Wildcard))
 
@@ -140,7 +141,7 @@ object Theorem {
       case Proofterm.Oracle(name, term, typ) =>
         ???
       case pthm: PThm =>
-        val theorem = Theorems.compute(pthm)
+        val theorem = blocking { Await.result(Theorems.compute(pthm), Duration.Inf) }
         assert(pthm.header.types.nonEmpty)
         val types = pthm.header.types.get.map(Main.translateTyp)
         Application(Identifier(theorem.fullName, at = true), intersperseWildcards(types): _*)
