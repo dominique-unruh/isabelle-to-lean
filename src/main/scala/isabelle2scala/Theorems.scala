@@ -35,11 +35,10 @@ object Theorems {
         for (oldTheorem <- old) {
           val oldProp = oldTheorem.pthm.header.prop
           val prop = pthm.header.prop
-          println(s"*** Theorem ${pthm.header.name} already encountered ***")
-          println(s"  $old: ${oldProp.pretty(ctxt)}")
-          println(s"  ${pthm.header.serial}: ${prop.pretty(ctxt)}")
-          if (prop != oldProp)
-            println("  Propositions differ!")
+          print(s"*** Theorem ${pthm.header.name} already encountered ***\n" +
+            s"  ${oldTheorem.pthm.header.serial}: ${oldProp.pretty(ctxt)}\n" +
+            s"  ${pthm.header.serial}: ${prop.pretty(ctxt)}\n" +
+            (if (prop != oldProp) "Propositions differ!\n" else ""))
         }
       else
         Future.unit
