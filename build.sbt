@@ -8,5 +8,6 @@ lazy val root = (project in file("."))
 
     libraryDependencies += ("de.unruh" %% "scala-isabelle" % "master-SNAPSHOT").cross(CrossVersion.for3Use2_13),
     libraryDependencies += "org.apache.commons" % "commons-text" % "1.9",
-    libraryDependencies += "org.scalaz" %% "scalaz" % "7.3.6"
-  )
+    libraryDependencies += "org.scalaz" %% "scalaz" % "7.3.6",
+    Compile / resourceDirectory := baseDirectory.value / "src" / "lean",
+)

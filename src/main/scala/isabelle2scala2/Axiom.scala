@@ -25,14 +25,17 @@ object Axiom {
          valArgs <- Utils.valArgumentsOfProp(prop)) yield {
       val propString = Main.translateTermClean(prop)
       // TODO consts
-      val constsString = "...consts..."
+      val constsString = ""
       output.synchronized {
-        output.println(s"-- Axiom $name: ${prop.pretty(ctxt)}")
-        output.println(s"def $fullName")
-        output.println(s"      $typArgs -- type args")
-        output.println(s"      -- $constsString -- constants")
-        output.println(s"      $valArgs -- value args")
-        output.println(s"  = $propString")
+        output.println(s"/-- Def of Isabelle axiom $name: ${prop.pretty(ctxt)} -/")
+        output.println(s"noncomputable def $fullName")
+        if (typArgs.nonEmpty)
+          output.println(s"     /- Type args -/  $typArgs")
+        if (constsString.nonEmpty)
+          output.println(s"     /- Constants -/  $constsString")
+        if (valArgs.nonEmpty)
+          output.println(s"     /- Value args -/ $valArgs")
+        output.println(s"  := $propString")
         output.println()
         output.flush()
       }
