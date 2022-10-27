@@ -1,13 +1,17 @@
 package isabelle2scala2
 
+import de.unruh.isabelle.pure.Typ
+
 import java.util.concurrent.ConcurrentHashMap
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.runtime.BoxedUnit
 import scala.util.control.Breaks
 
+import Globals.{ctxt, given}
+
 object Naming {
-  private val names = new ConcurrentHashMap[(Namespace, String | (String, Long)), String]()
+  private val names = new ConcurrentHashMap[(Namespace, String, Any), String]()
   /** Synchronization via `this` */
   private val assigned = new ConcurrentHashMap[String, BoxedUnit]()
 
@@ -64,20 +68,23 @@ object Naming {
     }
   }
 
-  def mapName(name: String | (String, Long),
+  private def makeSuffix(value: Any): String = value match
+    case list : List[_] => list.map(makeSuffix).mkString("_")
+    case int: Int => int.toString
+    case typ: Typ => typ.pretty(ctxt)
+    case _: Unit => ""
+
+  def mapName(name: String,
+              extra: Any = {},
               prefix: String = "",
               suggestion: String = "",
               category: Namespace): String =
-    names.computeIfAbsent((category, name), { _ =>
+    names.computeIfAbsent((category, name, extra), { _ =>
       val rawName =
         if (suggestion.nonEmpty)
           suggestion
         else
-          name match {
-            case name: String => prefix + name
-            case (name: String, index: Long) => prefix + name + index
-          }
-
+          s"$prefix$name${makeSuffix(extra)}"
       val sanitizedName = sanitizeName(rawName)
       val mappedName = findUnusedName(sanitizedName)
       mappedName

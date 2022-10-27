@@ -36,10 +36,12 @@ object Main {
   def main(args: Array[String]): Unit = {
     // We can get all theorems from a thy (incl ancestors) via "Global_Theory.all_thms_of thy false"
     val thmNames = Seq(
-      "HOL.conjI",
+//      "HOL.conjI",
 //      "Binomial.binomial_eq_0",
-//      "Nat.add_0_right",
+      "Nat.add_0_right",
     )
+
+    Globals.isabelle.await
 
     //    Constants.add(Constant("Pure.imp"))
     //    Constants.add(Constant("Pure.eq"))
@@ -100,100 +102,20 @@ object Main {
 
     val targs = tvars map { case ((name, index), sort) =>
       // TODO: don't ignore sort!
-      val name2 = mapName((name, index), category = Namespace.TVar)
+      val name2 = mapName(name = name, extra = index, category = Namespace.TVar)
       s"{$name2 : Type} [Nonempty $name2]"
     }
 
     val vars2 = vars map { case ((name, index), typ) =>
-      val name2 = mapName((name, index), category = Namespace.Var)
-      s"($name2 : ${translateTyp_OLD(typ)})"
+      val name2 = mapName(name = name, extra = index, category = Namespace.Var)
+      s"($name2 : ${Utils.translateTyp(typ)})"
     }
 
     val frees2 = frees map { case (name, typ) =>
       val name2 = mapName(name, category = Namespace.Free)
-      s"($name2 : ${translateTyp_OLD(typ)})"
+      s"($name2 : ${Utils.translateTyp(typ)})"
     }
 
     (targs ++ frees2 ++ vars2).mkString(" ")
   }
-
-
-  /** Assumption: no TVars or TFree have same name but different types
-   * TODO: check this assm here */
-  def translateTermClean(term: Term, env: List[String] = Nil,
-                         defaultAllBut: Option[(Set[(String, Int)], Set[String])] = None): OutputTerm =
-    translateTerm(cleanDuplicateAbsNames(term, used = env.toSet), env = env, defaultAllBut = defaultAllBut)
-
-
-  /** Assumptions:
-   * - no TVars or TFree have same name but different types
-   * - no empty names in Abs or shadowed names */
-  def translateTerm(term: Term, env: List[String],
-                    defaultAllBut: Option[(Set[(String, Int)], Set[String])]): OutputTerm = term match {
-    case App(t, u) => Application({
-      translateTerm(t, env, defaultAllBut)
-    }, translateTerm(u, env, defaultAllBut))
-    case Abs(name, typ, term) =>
-      assert(name.nonEmpty)
-      val name2 = mapName(name, category = Namespace.AbsVar)
-      Abstraction(name2, translateTyp_OLD(typ), translateTerm(term, name2 :: env, defaultAllBut))
-    case Bound(i) => Identifier(env(i))
-    case Var(name, index, typ) =>
-      defaultAllBut match {
-        case Some((vars, _)) if !vars.contains(name, index) =>
-          Comment(s"?$name.$index", TypeConstraint(Identifier("Classical.ofNonempty"), translateTyp_OLD(typ)))
-        case _ =>
-          Identifier(mapName((name, index), category = Namespace.Var))
-      }
-    case Free(name, typ) =>
-      defaultAllBut match {
-        case Some((_, frees)) if !frees.contains(name) =>
-          Comment(name, TypeConstraint(Identifier("Classical.ofNonempty"), translateTyp_OLD(typ)))
-        case _ =>
-          Identifier(mapName(name, category = Namespace.Free))
-      }
-    case Const(name, typ) =>
-      val const : Constant = await(Constants.compute(name))
-      val args = const.instantiate(typ).map(translateTyp_OLD)
-      Application(Identifier(const.fullName, at = true), args: _*)
-  }
-
-  /** Assumptions: no TVars or TFree have same name but different types */
-  // TODO check
-  def translateTyp_OLD(typ: Typ): OutputTerm = typ match {
-    case Type("fun", t1, t2) => FunType(translateTyp_OLD(t1), translateTyp_OLD(t2))
-    case Type("fun", _*) => throw new RuntimeException("should not happen")
-    case Type(tcon, typs@_*) => Application(Identifier(mapName(tcon, category = Namespace.TypeCon)),
-      typs.map(translateTyp_OLD): _*)
-    case TVar(name, index, sort) => Identifier(mapName((name, index), category = Namespace.TVar))
-    case TFree(name, sort) => Identifier(mapName(name, category = Namespace.TFree))
-  }
-
-
-  def cleanDuplicateAbsNames(term: Term, used: Set[String] = Set.empty): Term = {
-    def getUnused(name: String): String = {
-      var name2 = if (name.isEmpty) "x" else name
-      while (used.contains(name2))
-        name2 += '\''
-      name2
-    }
-
-    term match
-      case Const(_, _) | Free(_, _) | Var(_, _, _) | Bound(_) => term
-      case App(t, u) =>
-        val tClean = cleanDuplicateAbsNames(t, used)
-        val uClean = cleanDuplicateAbsNames(u, used)
-        if ((tClean eq t) && (uClean eq u))
-          term
-        else
-          App(tClean, uClean)
-      case Abs(x, typ, body) =>
-        val x2 = getUnused(x)
-        val bodyClean = cleanDuplicateAbsNames(body, used + x2)
-        if ((x2 eq x) && (bodyClean eq body))
-          term
-        else
-          Abs(x2, typ, bodyClean)
-  }
-
 }

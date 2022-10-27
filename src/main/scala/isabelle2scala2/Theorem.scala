@@ -24,13 +24,13 @@ object Theorem {
     val name = pthm.header.name
     def prop: Term = pthm.header.prop
     val fullName: String = Naming.mapName(
-      name = (name, pthm.header.serial),
+      name = name, extra = pthm.header.serial,
       suggestion = if (name.nonEmpty) name else "thm_" + pthm.header.serial,
       category = Namespace.Theorem)
 
     val proof: Proofterm = pthm.fullProof(ctxt.theoryOf)
     val argString = Main.argumentsOfProp_OLD(prop)
-    val propString = Main.translateTermClean(prop)
+    val propString = Utils.translateTermClean(prop)
 
     Future {
       val axiomsBuffer = new UniqueListBuffer[Axiom]
