@@ -25,7 +25,7 @@ object Theorems {
   def compute(pthm: PThm): Future[Theorem] =
     for (result <- serialMap.computeIfAbsent(pthm.header.serial, _ => Theorem.createTheorem(pthm, Globals.output)))
       yield {
-        assert(pthm.header.serial == result.pthm.header.serial)
+        assert(pthm.header.serial == result.serial)
         result
       }
 }

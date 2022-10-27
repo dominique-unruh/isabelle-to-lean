@@ -20,7 +20,8 @@ object Axioms {
 */
 
   def compute(name: String, prop: Term): Future[Axiom] =
-    for (result <- nameMap.computeIfAbsent(name, _ => Axiom.createAxiom(name, prop, Globals.output)))
+    for (concreteProp <- Future.successful(prop.concreteRecursive); // TODO: there should be a non-blocking variant of this
+         result <- nameMap.computeIfAbsent(name, _ => Axiom.createAxiom(name, concreteProp, Globals.output)))
       yield {
         assert(prop == result.prop)
         result

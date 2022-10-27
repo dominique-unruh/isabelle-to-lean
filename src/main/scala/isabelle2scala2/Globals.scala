@@ -6,7 +6,7 @@ import de.unruh.isabelle.pure.{Context, Theory}
 import java.io.{FileOutputStream, PrintWriter}
 import java.nio.file.Path
 import java.util.concurrent.{ExecutorService, Executors, ThreadPoolExecutor}
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 import scala.jdk.CollectionConverters.given
 
 object Globals {
@@ -16,9 +16,9 @@ object Globals {
     while (true) {
       val active = executor.getActiveCount
       val size = executor.getPoolSize
-      println()
+//      println()
       println(s"Executor: $active/$size")
-      println()
+//      println()
 
 //      for ((thread: Thread) <- Thread.getAllStackTraces.asScala.keySet) {
 //        println(s"${thread.getName}: ${thread.getPriority}, ${thread.isDaemon}, ${thread.isAlive}")
@@ -29,6 +29,9 @@ object Globals {
     }
   }
   implicit val executionContext: ExecutionContext = scala.concurrent.ExecutionContext.fromExecutor(executor)
+
+//  implicit val executionContext: ExecutionContext = scala.concurrent.ExecutionContext.global
+
   implicit val isabelle: Isabelle = new Isabelle(setup)
   implicit val thy: Theory = Theory("Main")
   implicit val ctxt: Context = Context(thy)

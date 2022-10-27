@@ -19,7 +19,7 @@ import scala.jdk.CollectionConverters.given
 
 //noinspection UnstableApiUsage
 object Main {
-  def getPThm(thm: Thm): PThm = {
+  def getPThm(thm: Thm): PThm = { // TODO use futures
     @tailrec
     def strip(prf: Proofterm): PThm = prf match {
       case Proofterm.AppP(proof1, _) => strip(proof1)
@@ -35,8 +35,9 @@ object Main {
   def main(args: Array[String]): Unit = {
     // We can get all theorems from a thy (incl ancestors) via "Global_Theory.all_thms_of thy false"
     val thmNames = Seq(
-      "HOL.conjI",
-      "Binomial.binomial_eq_0",
+//      "HOL.conjI",
+//      "Binomial.binomial_eq_0",
+      "Nat.add_0_right",
     )
 
     //    Constants.add(Constant("Pure.imp"))
@@ -47,15 +48,16 @@ object Main {
 //      output.println(preamble)
     }
 
-    await(Constants.compute("Pure.imp"))
-    await(Constants.compute("Pure.eq"))
+//    await(Constants.compute("Pure.imp"))
+//    await(Constants.compute("Pure.eq"))
 
     val futures = thmNames map { thmName =>
-      for (thm <- Future.successful(Thm(ctxt, thmName));
+      for (thm <- Thm(ctxt, thmName).forceFuture;
            pthm = getPThm(thm);
            theorem <- Theorems.compute(pthm))
       yield {
         println(s"### Finished $thmName")
+//        println(s"### A.k.a. $theorem")
         println(s"# theorems:       ${Theorems.count}")
 //        println(s"# named theorems: ${Theorems.namedCount}")
         println(s"# axioms:         ${Axioms.count}")
@@ -65,9 +67,9 @@ object Main {
     for (future <- futures)
       Await.result(future, Duration.Inf)
 
-    println("Done.")
+    println(s"Done. ${Globals.executor.getActiveCount}")
 
-    Globals.executor.shutdown()
+//    Globals.executor.shutdown()
 
     output.synchronized {
       output.close()
@@ -120,7 +122,7 @@ object Main {
   // TODO: check for duplicate Var/Free with different types
   // TODO: check for duplicate TFree/TVar with different sorts
   // TODO use futures
-  def argumentsOfProp(prop: Term): String = {
+  def argumentsOfProp_OLD(prop: Term): String = {
     val vars = IsabelleOps.addVars(prop).retrieveNow.reverse
     val frees = IsabelleOps.addFrees(prop).retrieveNow.reverse
     //    if frees.nonEmpty && vars.nonEmpty then
@@ -137,12 +139,12 @@ object Main {
 
     val vars2 = vars map { case ((name, index), typ) =>
       val name2 = mapName((name, index), category = Namespace.Var)
-      s"($name2 : ${translateTyp(typ)})"
+      s"($name2 : ${translateTyp_OLD(typ)})"
     }
 
     val frees2 = frees map { case (name, typ) =>
       val name2 = mapName(name, category = Namespace.Free)
-      s"($name2 : ${translateTyp(typ)})"
+      s"($name2 : ${translateTyp_OLD(typ)})"
     }
 
     (targs ++ frees2 ++ vars2).mkString(" ")
@@ -167,35 +169,35 @@ object Main {
     case Abs(name, typ, term) =>
       assert(name.nonEmpty)
       val name2 = mapName(name, category = Namespace.AbsVar)
-      Abstraction(name2, translateTyp(typ), translateTerm(term, name2 :: env, defaultAllBut))
+      Abstraction(name2, translateTyp_OLD(typ), translateTerm(term, name2 :: env, defaultAllBut))
     case Bound(i) => Identifier(env(i))
     case Var(name, index, typ) =>
       defaultAllBut match {
         case Some((vars, _)) if !vars.contains(name, index) =>
-          Comment(s"?$name.$index", TypeConstraint(Identifier("Classical.ofNonempty"), translateTyp(typ)))
+          Comment(s"?$name.$index", TypeConstraint(Identifier("Classical.ofNonempty"), translateTyp_OLD(typ)))
         case _ =>
           Identifier(mapName((name, index), category = Namespace.Var))
       }
     case Free(name, typ) =>
       defaultAllBut match {
         case Some((_, frees)) if !frees.contains(name) =>
-          Comment(name, TypeConstraint(Identifier("Classical.ofNonempty"), translateTyp(typ)))
+          Comment(name, TypeConstraint(Identifier("Classical.ofNonempty"), translateTyp_OLD(typ)))
         case _ =>
           Identifier(mapName(name, category = Namespace.Free))
       }
     case Const(name, typ) =>
       val const : Constant = await(Constants.compute(name))
-      val args = const.instantiate(typ).map(translateTyp)
+      val args = const.instantiate(typ).map(translateTyp_OLD)
       Application(Identifier(const.fullName, at = true), args: _*)
   }
 
   /** Assumptions: no TVars or TFree have same name but different types */
   // TODO check
-  def translateTyp(typ: Typ): OutputTerm = typ match {
-    case Type("fun", t1, t2) => FunType(translateTyp(t1), translateTyp(t2))
+  def translateTyp_OLD(typ: Typ): OutputTerm = typ match {
+    case Type("fun", t1, t2) => FunType(translateTyp_OLD(t1), translateTyp_OLD(t2))
     case Type("fun", _*) => throw new RuntimeException("should not happen")
     case Type(tcon, typs@_*) => Application(Identifier(mapName(tcon, category = Namespace.TypeCon)),
-      typs.map(translateTyp): _*)
+      typs.map(translateTyp_OLD): _*)
     case TVar(name, index, sort) => Identifier(mapName((name, index), category = Namespace.TVar))
     case TFree(name, sort) => Identifier(mapName(name, category = Namespace.TFree))
   }
