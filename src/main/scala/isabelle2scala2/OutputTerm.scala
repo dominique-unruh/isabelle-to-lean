@@ -42,7 +42,8 @@ case class Identifier(name: String, at: Boolean = false) extends OutputTerm {
 case class Application(head: OutputTerm, arg: OutputTerm) extends OutputTerm {
   override def toCord: Cord = {
     val headNoParens = head.isInstanceOf[Identifier] || head.isInstanceOf[Application] || head.isInstanceOf[Wildcard.type]
-    val argNoParens = arg.isInstanceOf[Identifier] || arg.isInstanceOf[Wildcard.type]
+      || head.isInstanceOf[Parentheses]
+    val argNoParens = arg.isInstanceOf[Identifier] || arg.isInstanceOf[Wildcard.type] || arg.isInstanceOf[Parentheses]
     cord"${maybeParens(head, !headNoParens)} ${maybeParens(arg, !argNoParens)}"
   }
 }
@@ -54,6 +55,7 @@ object Application {
 case class Abstraction(variable: String, typ: OutputTerm, body: OutputTerm) extends OutputTerm {
   override def toCord: Cord = {
     val bodyNoParens = body.isInstanceOf[Identifier] || body.isInstanceOf[Application] || body.isInstanceOf[Abstraction] || body.isInstanceOf[Wildcard.type]
+      || body.isInstanceOf[Parentheses]
     cord"fun ${TypeConstraint(Identifier(variable), typ).toCord} => ${maybeParens(body, !bodyNoParens)}"
   }
 }
@@ -61,7 +63,9 @@ case class Abstraction(variable: String, typ: OutputTerm, body: OutputTerm) exte
 case class FunType(inType: OutputTerm, outType: OutputTerm) extends OutputTerm {
   override def toCord: Cord = {
     val inNoParens = inType.isInstanceOf[Identifier] || inType.isInstanceOf[Application] || inType.isInstanceOf[Wildcard.type]
+      || inType.isInstanceOf[Parentheses]
     val outNoParens = outType.isInstanceOf[Identifier] || outType.isInstanceOf[Application] || outType.isInstanceOf[FunType] || outType.isInstanceOf[Wildcard.type]
+      || outType.isInstanceOf[Parentheses]
     cord"${maybeParens(inType, !inNoParens)} -> ${maybeParens(outType, !outNoParens)}"
   }
 }
@@ -69,11 +73,20 @@ case class FunType(inType: OutputTerm, outType: OutputTerm) extends OutputTerm {
 case class TypeConstraint(value: OutputTerm, typ: OutputTerm) extends OutputTerm {
   override def toCord: Cord = {
     val valueNoParens = value.isInstanceOf[Identifier] || value.isInstanceOf[Application] || value.isInstanceOf[Wildcard.type]
+      || value.isInstanceOf[Parentheses]
     val typNoParens = typ.isInstanceOf[Identifier] || typ.isInstanceOf[Application] || typ.isInstanceOf[FunType]
+      || typ.isInstanceOf[Parentheses]
     cord"${maybeParens(value, !valueNoParens)}: ${maybeParens(typ, !typNoParens)}"
   }
 }
 
 case object Wildcard extends OutputTerm {
   override val toCord: Cord = Cord("_")
+}
+
+case class Parentheses(value: OutputTerm) extends OutputTerm {
+  override def toCord: Cord = {
+    val noParens = value.isInstanceOf[Parentheses]
+    maybeParens(value, !noParens)
+  }
 }

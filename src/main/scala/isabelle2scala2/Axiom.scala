@@ -16,6 +16,16 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
     case axiom: Axiom => name == axiom.name
     case _ => false
   }
+
+  case class Instantiated(fullName: String, typ: Typ, typArgs: List[Typ]) {
+    inline def axiom: Axiom = Axiom.this
+
+    override def hashCode(): Int = fullName.hashCode
+
+    override def equals(obj: Any): Boolean = obj match
+      case inst: Instantiated => fullName == inst.fullName
+      case _ => false
+  }
 }
 
 object Axiom {
@@ -29,9 +39,9 @@ object Axiom {
       val constants = constantsBuffer.result()
 
       val constsString = constants map { const =>
-        val args = const.typArgs map { typ => s" (${Utils.translateTyp(typ)})" } mkString " "
-        s"(${const.fullName}: ${const.constant.fullName}$args)"
-      } mkString(" ")
+        Parentheses(TypeConstraint(Identifier(const.fullName),
+          Application(Identifier(const.constant.fullName, true), const.typArgs.map(Utils.translateTyp): _*)))
+      } mkString " "
 
       output.synchronized {
         output.println(s"/-- Def of Isabelle axiom $name: ${prop.pretty(ctxt)} -/")
