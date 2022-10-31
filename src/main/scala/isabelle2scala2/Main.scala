@@ -41,6 +41,15 @@ object Main {
 //      "Nat.add_0_right",
     )
 
+    /*
+
+    def Pure_imp1 (p:Prop) (q:Prop): Prop := p -> q
+    def Pure_prop1 (p:Prop): Prop := p
+    def Pure_eqprop (p:Prop) (q:Prop): Prop := p = q
+    #reduce axiom_Pure_equal_elim Pure_imp1 Pure_eqprop
+
+    */
+
     Globals.isabelle.await
 
     //    Constants.add(Constant("Pure.imp"))

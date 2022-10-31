@@ -6,10 +6,12 @@ import java.io.PrintWriter
 import Globals.{ctxt, given}
 import de.unruh.isabelle.mlvalue.Implicits.given
 import de.unruh.isabelle.pure.Implicits.given
+import Utils.zipStrict
 
-import scala.concurrent.{Future}
+import scala.concurrent.Future
 
-case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteTerm, constants: List[Constant#Instantiated]) {
+case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteTerm,
+                                 constants: List[Constant#Instantiated], typParams: List[TypeVariable]) {
   override def toString: String = s"Axiom($name)"
 
   override def hashCode(): Int = name.hashCode
@@ -19,28 +21,32 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
     case _ => false
   }
 
-  def instantiate(typArgs: List[Typ]): Instantiated = {
+  def instantiate(typArgs: List[Typ]): Future[Instantiated] = {
     val fullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.AxiomInstantiated)
-    Instantiated(fullName = fullName, typArgs = typArgs)
+    val constants2 = constants.map(_.substitute(typParams.zipStrict(typArgs)))
+    for (constants3 <- Future.sequence(constants2))
+      yield
+        Instantiated(fullName = fullName, typArgs = typArgs, constants = constants3)
   }
 
-  case class Instantiated(fullName: String, typArgs: List[Typ]) {
+  inline def identifier: Identifier = Identifier(fullName)
+
+  case class Instantiated(fullName: String, typArgs: List[Typ], constants: List[Constant#Instantiated]) {
     inline def axiom: Axiom = Axiom.this
 
-    /** Returns "instantiated-fullName : axiom-fullName typArgs"
-     * TODO: should add constants */
+    /** Returns "instantiated-fullName : axiom-fullName typArgs" */
     def outputTerm: OutputTerm =
-      TypeConstraint(Identifier(fullName), Application(Identifier(axiom.fullName), typArgs.map(Utils.translateTyp) :_*))
+      TypeConstraint(identifier,
+        Application(
+          Application(axiom.identifier, typArgs.map(Utils.translateTyp) :_*),
+          constants.map(_.identifier) :_*))
 
-    def substitute(subst: IterableOnce[(TypeVariable, Typ)]): Future[Instantiated] = {
-      val subst2 : List[(Typ,Typ)] = subst.iterator.map{case (t,u) => (t.typ, u)}.toList
-      val typArgs2 = typArgs.map(IsabelleOps.substituteTyp(subst2, _).retrieve)
-      for (typArgs3 <- Future.sequence(typArgs2))
-        yield {
-          val newFullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.AxiomInstantiated)
-          Instantiated(fullName = newFullName, typArgs = typArgs3)
-        }
-    }
+    inline def identifier: Identifier = Identifier(fullName)
+
+    def substitute(subst: IterableOnce[(TypeVariable, Typ)]): Future[Instantiated] =
+      for (typArgs2 <- Utils.substituteTypArgs(typArgs, subst);
+           inst <- Axiom.this.instantiate(typArgs2))
+        yield inst
 
     override def hashCode(): Int = fullName.hashCode
 
@@ -53,8 +59,8 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
 object Axiom {
   def createAxiom(name: String, prop: ConcreteTerm, output: PrintWriter): Future[Axiom] = {
     val fullName: String = Naming.mapName(prefix = "axiom_", name = name, category = Namespace.Axiom)
-    for (typArgs <- Utils.typArgumentsOfProp(prop);
-         valArgs <- Utils.valArgumentsOfProp(prop)) yield {
+    for (typParams <- Utils.typParametersOfProp(prop);
+         valParams <- Utils.valParametersOfProp(prop)) yield {
 
       val constantsBuffer = UniqueListBuffer[Constant#Instantiated]()
       val propString = Utils.translateTermClean(prop, constants = constantsBuffer)
@@ -65,17 +71,17 @@ object Axiom {
       output.synchronized {
         output.println(s"/-- Def of Isabelle axiom $name: ${prop.pretty(ctxt)} -/")
         output.println(s"def $fullName")
-        if (typArgs.nonEmpty)
-          output.println(s"     /- Type args -/  $typArgs")
+        if (typParams.nonEmpty)
+          output.println(s"     /- Type args -/  $typParams")
         if (constsString.nonEmpty)
           output.println(s"     /- Constants -/  $constsString")
-        if (valArgs.nonEmpty)
-          output.println(s"     /- Value args -/ $valArgs")
+        if (valParams.nonEmpty)
+          output.println(s"     /- Value args -/ $valParams")
         output.println(s"  := $propString")
         output.println()
         output.flush()
       }
-      Axiom(fullName = fullName, name = name, prop = prop, constants = constants)
+      Axiom(fullName = fullName, typParams = typParams, name = name, prop = prop, constants = constants)
     }
   }
 }

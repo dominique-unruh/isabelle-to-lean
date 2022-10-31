@@ -13,6 +13,7 @@ import scala.concurrent.Future
 import scalaz.syntax.all.given
 import OutputTerm.given
 import scalaz.Scalaz.longInstance
+import Utils.zipStrict
 
 //noinspection UnstableApiUsage
 case class Theorem(name: String, serial: Serial, axioms: List[Axiom#Instantiated],
@@ -28,8 +29,7 @@ case class Theorem(name: String, serial: Serial, axioms: List[Axiom#Instantiated
   def instantiate(pthm: PThm): Future[Instantiated] = {
     val typs = pthm.header.types.getOrElse(throw RuntimeException(s"No type instantiation provided in theorem $pthm"))
     val typargs = this.typArgs
-    assert(typargs.length == typs.length)
-    val subst = typargs.zip(typs)
+    val subst = typargs.zipStrict(typs)
     for (axioms <- Future.sequence( this.axioms.map(_.substitute(subst))) )
       yield
         new Instantiated(typs = typs, axioms = axioms)
@@ -58,8 +58,8 @@ object Theorem {
     val constants = propConstants // TODO include the ones in proof
     val constsString = constants map { c => Parentheses(c.outputTerm) } mkString " "
 
-    for (typArgs <- Utils.typArgumentsOfProp(prop);
-         valArgString <- Utils.valArgumentsOfProp(prop);
+    for (typArgs <- Utils.typParametersOfProp(prop);
+         valArgString <- Utils.valParametersOfProp(prop);
          axioms <- allAxiomsInProof(proof))
     yield {
       val axiomsString = axioms map { a => Parentheses(a.outputTerm) } mkString " "
@@ -104,12 +104,11 @@ object Theorem {
       case Proofterm.Abst(name, typ, proof) => findAxioms(proof)
       case Proofterm.Hyp(term) => Future.unit
       case Proofterm.PAxm(name, term, typs) =>
-        for (axiom <- Axioms.compute(name, term))
-          yield {
-            assert(typs.nonEmpty);
-            val instantiated = axiom.instantiate(typs.get)
+        for (axiom <- Axioms.compute(name, term);
+             _ = assert(typs.nonEmpty);
+             instantiated <- axiom.instantiate(typs.get))
+          yield
             axiomsBuffer.addOne(instantiated)
-          }
       case Proofterm.PBound(index) => Future.unit
       case Proofterm.OfClass(typ, clazz) => ???
       case Proofterm.Oracle(name, term, typ) => ???

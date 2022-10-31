@@ -12,40 +12,41 @@ import java.io.PrintWriter
 import scala.collection.mutable
 import scala.concurrent.Future
 
+import Utils.given
+
 object Utils {
   def runAsDaemon(task: => Any): Unit = {
-    val thread = new Thread({ () => task } : Runnable)
+    val thread = new Thread({ () => task }: Runnable)
     thread.setDaemon(true)
     thread.start()
   }
 
   // TODO: check for duplicate Var/Free with different types
-  def valArgumentsOfProp(prop: Term): Future[String] = {
+  def valParametersOfProp(prop: Term): Future[String] = {
     def translateTyps[A](v: Seq[(A, Typ)]) = Future.traverse(v) { case (x, typ) =>
-      for (typ2 <- Future.successful(translateTyp(typ))) yield (x, typ2) }
+      for (typ2 <- Future.successful(translateTyp(typ))) yield (x, typ2)
+    }
+
     for (vars <- IsabelleOps.addVars(prop).retrieve;
          vars2 <- translateTyps(vars);
          frees <- IsabelleOps.addFrees(prop).retrieve;
          frees2 <- translateTyps(frees))
-      yield {
-        val vars3 = vars2.reverse map { case ((name, index), typ) =>
-          val name2 = mapName(name = name, extra = index, category = Namespace.Var)
-          s"($name2: $typ)"
-        }
-        val frees3 = frees2.reverse map { case (name, typ) =>
-          val name2 = mapName(name, category = Namespace.Free)
-          s"($name2: $typ)"
-        }
-        (frees3 ++ vars3).mkString(" ")
+    yield {
+      val vars3 = vars2.reverse map { case ((name, index), typ) =>
+        val name2 = mapName(name = name, extra = index, category = Namespace.Var)
+        s"($name2: $typ)"
       }
+      val frees3 = frees2.reverse map { case (name, typ) =>
+        val name2 = mapName(name, category = Namespace.Free)
+        s"($name2: $typ)"
+      }
+      (frees3 ++ vars3).mkString(" ")
+    }
   }
 
 
-
-
-
   // TODO: check for duplicate TFree/TVar with different sorts
-  def typArgumentsOfProp(prop: Term): Future[List[TypeVariable]] =
+  def typParametersOfProp(prop: Term): Future[List[TypeVariable]] =
     for (tfrees <- IsabelleOps.addTFrees(prop).retrieve;
          tvars <- IsabelleOps.addTVars(prop).retrieve)
     yield {
@@ -55,12 +56,11 @@ object Utils {
         // TODO: don't ignore sort!
         val name2 = mapName(name = name, extra = index, category = Namespace.TVar)
         TypeVariable(fullName = name2, typ = TVar(name, index, sort))
-//        s"{$name2: Type} [Nonempty $name2]" // TODO: In axiom declarations, we can skip the [Nonempty ...]
+        //        s"{$name2: Type} [Nonempty $name2]" // TODO: In axiom declarations, we can skip the [Nonempty ...]
       }
 
-//      targs.mkString(" ")
+      //      targs.mkString(" ")
     }
-
 
 
   /** Return an ɑ-equivalent term that has no empty or shadowed bound variable names and avoids all names in `used`. */
@@ -136,8 +136,8 @@ object Utils {
       val const: Constant = await(Constants.compute(name))
       val instantiated: const.Instantiated = const.instantiate(typ)
       constants += instantiated
-//      val args = const.instantiate(typ).map(translateTyp_OLD)
-//      Application(Identifier(const.fullName, at = true), args: _*)
+      //      val args = const.instantiate(typ).map(translateTyp_OLD)
+      //      Application(Identifier(const.fullName, at = true), args: _*)
       Identifier(instantiated.fullName)
   }
 
@@ -164,4 +164,20 @@ object Utils {
 
   def mkCord(sep: String, cords: IterableOnce[Cord]): Cord =
     mkCord(Cord(sep), cords)
+
+  extension[A] (list: List[A]) {
+    def zipStrict[B](other: List[B]): List[(A, B)] = list match
+      case head :: tail => other match
+        case ohead :: otail => (head, ohead) :: tail.zipStrict(otail)
+        case Nil => throw IllegalArgumentException("zipStrict: second list longer")
+      case Nil => other match
+        case _: `::`[_] => throw IllegalArgumentException("zipStrict: first list longer")
+        case Nil => Nil
+  }
+
+  def substituteTypArgs(typArgs: List[Typ], subst: IterableOnce[(TypeVariable, Typ)]): Future[List[Typ]] = {
+    val subst2: List[(Typ, Typ)] = subst.iterator.map { case (t, u) => (t.typ, u) }.toList
+    val typArgs2 = typArgs.map(IsabelleOps.substituteTyp(subst2, _).retrieve)
+    Future.sequence(typArgs2)
+  }
 }
