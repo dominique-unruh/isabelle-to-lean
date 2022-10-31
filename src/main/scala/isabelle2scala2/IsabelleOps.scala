@@ -15,4 +15,5 @@ object IsabelleOps {
   val addTVars = compileFunction[Term, List[((String, Int), List[String])]]("fn t => Term.add_tvars t []")
   val theConstType = compileFunction[Theory, String, Typ]("fn (thy,name) => Sign.the_const_type thy name")
   val constTypargs = compileFunction[Theory, String, Typ, List[Typ]]("fn (thy,name,typ) => Sign.const_typargs thy (name,typ)")
+  val substituteTyp = compileFunction[List[(Typ,Typ)], Typ, Typ]("fn (subst, typ) => typ_subst_atomic subst typ")
 }

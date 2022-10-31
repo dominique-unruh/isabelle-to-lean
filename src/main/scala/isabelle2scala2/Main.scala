@@ -36,9 +36,9 @@ object Main {
   def main(args: Array[String]): Unit = {
     // We can get all theorems from a thy (incl ancestors) via "Global_Theory.all_thms_of thy false"
     val thmNames = Seq(
-//      "HOL.conjI",
+      "HOL.conjI",
 //      "Binomial.binomial_eq_0",
-      "Nat.add_0_right",
+//      "Nat.add_0_right",
     )
 
     Globals.isabelle.await

@@ -4,6 +4,7 @@ import scala.collection.generic.DefaultSerializable
 import scala.collection.mutable.ListBuffer
 import scala.collection.{IterableFactoryDefaults, SeqFactory, StrictOptimizedSeqFactory, StrictOptimizedSeqOps, mutable}
 
+/** Not thread safe */
 class UniqueListBuffer[A] extends mutable.AbstractBuffer[A]
   with mutable.SeqOps[A, UniqueListBuffer, UniqueListBuffer[A]]
   with StrictOptimizedSeqOps[A, UniqueListBuffer, UniqueListBuffer[A]]

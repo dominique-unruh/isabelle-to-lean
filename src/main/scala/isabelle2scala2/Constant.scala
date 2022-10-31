@@ -22,13 +22,17 @@ case class Constant(fullName: String, name: String, typ: Typ, typString: OutputT
   }
 
   case class Instantiated(fullName: String, typ: Typ, typArgs: List[Typ]) {
-    inline def constant: Constant = Constant.this
+    inline def constant: Constant.this.type = Constant.this
 
     override def hashCode(): Int = fullName.hashCode
 
     override def equals(obj: Any): Boolean = obj match
       case inst : Instantiated => fullName == inst.fullName
       case _ => false
+
+    def outputTerm: OutputTerm =
+      TypeConstraint(Identifier(fullName),
+        Application(Identifier(constant.fullName, true), typArgs.map(Utils.translateTyp): _*))
   }
 }
 

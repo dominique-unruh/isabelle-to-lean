@@ -6,7 +6,9 @@ import de.unruh.isabelle.mlvalue.Implicits.given
 import Globals.given
 import isabelle2scala2.Main.await
 import isabelle2scala2.Naming.mapName
+import scalaz.{Cord, Monoid}
 
+import java.io.PrintWriter
 import scala.collection.mutable
 import scala.concurrent.Future
 
@@ -38,21 +40,28 @@ object Utils {
       }
   }
 
+
+
+
+
   // TODO: check for duplicate TFree/TVar with different sorts
-  def typArgumentsOfProp(prop: Term): Future[String] =
+  def typArgumentsOfProp(prop: Term): Future[List[TypeVariable]] =
     for (tfrees <- IsabelleOps.addTFrees(prop).retrieve;
          tvars <- IsabelleOps.addTVars(prop).retrieve)
     yield {
       assert(tfrees.isEmpty)
 
-      val targs = tvars.reverse map { case ((name, index), sort) =>
+      /*val targs =*/ tvars.reverse map { case ((name, index), sort) =>
         // TODO: don't ignore sort!
         val name2 = mapName(name = name, extra = index, category = Namespace.TVar)
-        s"{$name2: Type} [Nonempty $name2]"
+        TypeVariable(fullName = name2, typ = TVar(name, index, sort))
+//        s"{$name2: Type} [Nonempty $name2]" // TODO: In axiom declarations, we can skip the [Nonempty ...]
       }
 
-      targs.mkString(" ")
+//      targs.mkString(" ")
     }
+
+
 
   /** Return an ɑ-equivalent term that has no empty or shadowed bound variable names and avoids all names in `used`. */
   def cleanDuplicateAbsNames(term: Term, used: Set[String] = Set.empty): Term = {
@@ -139,4 +148,20 @@ object Utils {
                          constants: mutable.Buffer[Constant#Instantiated] = ForgetfulBuffer()): OutputTerm =
     translateTerm(cleanDuplicateAbsNames(term, used = env.toSet), env = env, defaultAllBut = defaultAllBut, constants = constants)
 
+
+  def mkCord(sep: Cord, cords: IterableOnce[Cord]): Cord = {
+    var result = Cord.monoid.zero
+    var first = true
+    for (cord <- cords) {
+      if (first)
+        result = cord
+      else
+        result = result ++ sep ++ cord
+      first = false
+    }
+    result
+  }
+
+  def mkCord(sep: String, cords: IterableOnce[Cord]): Cord =
+    mkCord(Cord(sep), cords)
 }

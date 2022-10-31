@@ -16,9 +16,9 @@ sealed trait OutputTerm {
     if (parens) cord"($term)" else term.toCord
 }
 object OutputTerm {
-  implicit object showTerm extends Show[Term] {
+/*  implicit object showTerm extends Show[Term] {
     override def show(f: Term): Cord = Cord(Term.toString)
-  }
+  }*/
   implicit object showOutputTerm extends Show[OutputTerm] {
     override def show(f: OutputTerm): Cord = f.toCord
   }

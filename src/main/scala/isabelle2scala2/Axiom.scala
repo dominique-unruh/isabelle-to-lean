@@ -1,11 +1,13 @@
 package isabelle2scala2
 
-import de.unruh.isabelle.pure.{ConcreteTerm, Term}
+import de.unruh.isabelle.pure.{ConcreteTerm, Term, Typ}
 
 import java.io.PrintWriter
 import Globals.{ctxt, given}
+import de.unruh.isabelle.mlvalue.Implicits.given
+import de.unruh.isabelle.pure.Implicits.given
 
-import scala.concurrent.Future
+import scala.concurrent.{Future}
 
 case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteTerm, constants: List[Constant#Instantiated]) {
   override def toString: String = s"Axiom($name)"
@@ -17,8 +19,28 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
     case _ => false
   }
 
-  case class Instantiated(fullName: String, typ: Typ, typArgs: List[Typ]) {
+  def instantiate(typArgs: List[Typ]): Instantiated = {
+    val fullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.AxiomInstantiated)
+    Instantiated(fullName = fullName, typArgs = typArgs)
+  }
+
+  case class Instantiated(fullName: String, typArgs: List[Typ]) {
     inline def axiom: Axiom = Axiom.this
+
+    /** Returns "instantiated-fullName : axiom-fullName typArgs"
+     * TODO: should add constants */
+    def outputTerm: OutputTerm =
+      TypeConstraint(Identifier(fullName), Application(Identifier(axiom.fullName), typArgs.map(Utils.translateTyp) :_*))
+
+    def substitute(subst: IterableOnce[(TypeVariable, Typ)]): Future[Instantiated] = {
+      val subst2 : List[(Typ,Typ)] = subst.iterator.map{case (t,u) => (t.typ, u)}.toList
+      val typArgs2 = typArgs.map(IsabelleOps.substituteTyp(subst2, _).retrieve)
+      for (typArgs3 <- Future.sequence(typArgs2))
+        yield {
+          val newFullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.AxiomInstantiated)
+          Instantiated(fullName = newFullName, typArgs = typArgs3)
+        }
+    }
 
     override def hashCode(): Int = fullName.hashCode
 
@@ -38,10 +60,7 @@ object Axiom {
       val propString = Utils.translateTermClean(prop, constants = constantsBuffer)
       val constants = constantsBuffer.result()
 
-      val constsString = constants map { const =>
-        Parentheses(TypeConstraint(Identifier(const.fullName),
-          Application(Identifier(const.constant.fullName, true), const.typArgs.map(Utils.translateTyp): _*)))
-      } mkString " "
+      val constsString = constants map { c => Parentheses(c.outputTerm) } mkString " "
 
       output.synchronized {
         output.println(s"/-- Def of Isabelle axiom $name: ${prop.pretty(ctxt)} -/")
