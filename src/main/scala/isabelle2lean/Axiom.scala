@@ -55,7 +55,7 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
         TypeConstraint(identifier,
           Application(
             Application(axiom.atIdentifier, typArgs.map(Utils.translateTyp) :_*),
-            constants.map(_.identifier) :_*)))
+            constants.map(_.asUsageTerm) :_*)))
 
     inline def identifier: Identifier = Identifier(fullName)
 
@@ -90,7 +90,7 @@ object Axiom {
           val typParamsString = typParams map { p => Parentheses(p.identifier) } mkCord " "
           output.println(cord"     /- Type params -/   $typParamsString")
         if (constants.nonEmpty)
-          val constsString = constants map { c => Parentheses(c.outputTerm) } mkCord " "
+          val constsString = constants map { c => Parentheses(c.asParameterTerm) } mkCord " "
           output.println(cord"     /- Constants -/     $constsString")
         output.print("  := ")
         if (valParams.nonEmpty)

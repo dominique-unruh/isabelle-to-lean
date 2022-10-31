@@ -17,15 +17,18 @@ import scala.collection.mutable
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Awaitable, Future}
 import scala.jdk.CollectionConverters.given
+import Utils.given
+import scalaz.Cord
 
 //noinspection UnstableApiUsage
 object Main {
-  def getPThm(thm: Thm): PThm = { // TODO use futures
+  def getPThm(thm: Thm): PThm = {
     @tailrec
     def strip(prf: Proofterm): PThm = prf match {
       case Proofterm.AppP(proof1, _) => strip(proof1)
       case Proofterm.Appt(proof, _) => strip(proof)
       case prf: Proofterm.PThm => prf
+      case prf => throw new AssertionError(s"getPThm: unexpected proofterm $prf")
     }
 
     strip(thm.proofOf)
@@ -33,13 +36,41 @@ object Main {
 
   def await[A](awaitable: Awaitable[A]): A = Await.result(awaitable, Duration.Inf)
 
+  def defineConstant(name: String, body: String, noncomputable: Boolean = false): Unit =
+    await(Constants.add(name, Constant.createConstant(
+      name = name, output = output, definition = Some(Cord(body)), noncomputable = noncomputable)))
+
+
   def main(args: Array[String]): Unit = {
     // We can get all theorems from a thy (incl ancestors) via "Global_Theory.all_thms_of thy false"
     val thmNames = Seq(
-//      "HOL.conjI",
+      "HOL.conjI",
 //      "Binomial.binomial_eq_0",
-      "Nat.add_0_right",
+//      "Nat.add_0_right",
     )
+
+
+    Globals.isabelle.await
+
+    output.synchronized {
+      output.println(preamble)
+      output.println()
+    }
+
+    defineConstant("Pure.imp", "fun p q => p -> q")
+    defineConstant("Pure.prop", "fun p => p")
+    defineConstant("Pure.eq", "fun p q => p = q")
+    defineConstant("HOL.eq", "fun p q => (Classical.propDecidable (p = q)).decide", noncomputable = true)
+    defineConstant("Pure.all", "fun f => ∀x, f x")
+    defineConstant("HOL.All", "fun f => (Classical.propDecidable (∀x, f x = true)).decide", noncomputable = true)
+    defineConstant("HOL.Trueprop", "fun b => b = true")
+    defineConstant("HOL.conj", "and")
+    defineConstant("HOL.disj", "or")
+    defineConstant("HOL.implies", "fun a b => (!a) || b")
+    defineConstant("HOL.Not", "not")
+    defineConstant("HOL.True", "Bool.true")
+    defineConstant("HOL.False", "Bool.false")
+    defineConstant("Nat.Suc", "Nat.succ")
 
     /*
 
@@ -49,19 +80,6 @@ object Main {
     #reduce axiom_Pure_equal_elim Pure_imp1 Pure_eqprop
 
     */
-
-    Globals.isabelle.await
-
-    //    Constants.add(Constant("Pure.imp"))
-    //    Constants.add(Constant("Pure.eq"))
-    //    Constants.add(Constant("Pure.all"))
-
-    output.synchronized {
-      output.println(preamble
-//        .replace("\n", "    ")
-      )
-      output.println()
-    }
 
 //    await(Constants.compute("Pure.imp"))
 //    await(Constants.compute("Pure.eq"))

@@ -100,3 +100,11 @@ case class Parentheses(value: OutputTerm) extends OutputTerm {
     maybeParens(value, !noParens)
   }
 }
+
+/*
+case class Raw(text: Cord) extends OutputTerm {
+  override def toCord: Cord = text
+}
+object Raw {
+  def apply(text: String): Raw = Raw(Cord(text))
+}*/

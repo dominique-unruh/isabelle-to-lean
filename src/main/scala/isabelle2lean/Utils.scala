@@ -143,10 +143,11 @@ object Utils {
     case Const(name, typ) =>
       val const: Constant = await(Constants.compute(name))
       val instantiated: const.Instantiated = const.instantiate(typ)
-      constants += instantiated
+      if (!const.isDefined)
+        constants += instantiated
       //      val args = const.instantiate(typ).map(translateTyp_OLD)
       //      Application(Identifier(const.fullName, at = true), args: _*)
-      Identifier(instantiated.fullName)
+      instantiated.asUsageTerm
   }
 
   /** Assumption: no TVars or TFree have same name but different types
