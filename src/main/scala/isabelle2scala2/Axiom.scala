@@ -1,18 +1,25 @@
 package isabelle2scala2
 
+import scala.language.implicitConversions
+
 import de.unruh.isabelle.pure.{ConcreteTerm, Term, Typ}
 
 import java.io.PrintWriter
 import Globals.{ctxt, given}
 import de.unruh.isabelle.mlvalue.Implicits.given
 import de.unruh.isabelle.pure.Implicits.given
-import Utils.zipStrict
+import Utils.{mkCord, zipStrict, toCord, given}
 
 import scala.concurrent.Future
+import OutputTerm.showOutputTerm
+import scalaz.Cord
+import scalaz.syntax.show.cordInterpolator
 
 case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteTerm,
                                  constants: List[Constant#Instantiated], typParams: List[TypeVariable]) {
   override def toString: String = s"Axiom($name)"
+
+  def shortSummary: Cord = cord"$name: ${prop.pretty(ctxt)}"
 
   override def hashCode(): Int = name.hashCode
 
@@ -29,17 +36,26 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
         Instantiated(fullName = fullName, typArgs = typArgs, constants = constants3)
   }
 
-  inline def identifier: Identifier = Identifier(fullName)
+  inline def atIdentifier: Identifier = Identifier(fullName, at = true)
 
   case class Instantiated(fullName: String, typArgs: List[Typ], constants: List[Constant#Instantiated]) {
     inline def axiom: Axiom = Axiom.this
 
+    def shortSummary: Cord = {
+      val summary1 = cord"$name: \"${prop.pretty(ctxt)}\""
+      if (typArgs.isEmpty)
+        summary1
+      else
+        cord"$summary1 for ${typArgs.map(_.pretty(ctxt).toCord).mkCord(", ")}"
+    }
+
     /** Returns "instantiated-fullName : axiom-fullName typArgs" */
     def outputTerm: OutputTerm =
-      TypeConstraint(identifier,
-        Application(
-          Application(axiom.identifier, typArgs.map(Utils.translateTyp) :_*),
-          constants.map(_.identifier) :_*))
+      Comment(shortSummary.shows,
+        TypeConstraint(identifier,
+          Application(
+            Application(axiom.atIdentifier, typArgs.map(Utils.translateTyp) :_*),
+            constants.map(_.identifier) :_*)))
 
     inline def identifier: Identifier = Identifier(fullName)
 
@@ -66,18 +82,21 @@ object Axiom {
       val propString = Utils.translateTermClean(prop, constants = constantsBuffer)
       val constants = constantsBuffer.result()
 
-      val constsString = constants map { c => Parentheses(c.outputTerm) } mkString " "
 
       output.synchronized {
         output.println(s"/-- Def of Isabelle axiom $name: ${prop.pretty(ctxt)} -/")
         output.println(s"def $fullName")
         if (typParams.nonEmpty)
-          output.println(s"     /- Type args -/  $typParams")
-        if (constsString.nonEmpty)
-          output.println(s"     /- Constants -/  $constsString")
+          val typParamsString = typParams map { p => Parentheses(p.identifier) } mkCord " "
+          output.println(cord"     /- Type params -/   $typParamsString")
+        if (constants.nonEmpty)
+          val constsString = constants map { c => Parentheses(c.outputTerm) } mkCord " "
+          output.println(cord"     /- Constants -/     $constsString")
+        output.print("  := ")
         if (valParams.nonEmpty)
-          output.println(s"     /- Value args -/ $valParams")
-        output.println(s"  := $propString")
+          val valParamsString = valParams map { c => Parentheses(c.outputTerm) } mkCord " "
+          output.print(cord"/- Value params -/  forall $valParamsString,\n    ")
+        output.println(propString)
         output.println()
         output.flush()
       }

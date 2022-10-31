@@ -1,18 +1,23 @@
 package isabelle2scala2
 
+import scala.language.implicitConversions
+
 import de.unruh.isabelle.pure.{Abs, App, Bound, Const, Free, TFree, TVar, Term, Typ, Type, Var}
 import de.unruh.isabelle.pure.Implicits.given
 import de.unruh.isabelle.mlvalue.Implicits.given
 import Globals.given
 import isabelle2scala2.Main.await
 import isabelle2scala2.Naming.mapName
-import scalaz.{Cord, Monoid}
+import scalaz.{Cord, Monoid, Show}
 
 import java.io.PrintWriter
 import scala.collection.mutable
 import scala.concurrent.Future
-
 import Utils.given
+import scalaz.Cord.CordInterpolator.Cords
+import scalaz.Cord.show
+import scalaz.syntax.all.ToShowOps
+import scalaz.Scalaz.cordInterpolator
 
 object Utils {
   def runAsDaemon(task: => Any): Unit = {
@@ -22,25 +27,28 @@ object Utils {
   }
 
   // TODO: check for duplicate Var/Free with different types
-  def valParametersOfProp(prop: Term): Future[String] = {
+  def valParametersOfProp(prop: Term): Future[List[ValueVariable]] = {
     def translateTyps[A](v: Seq[(A, Typ)]) = Future.traverse(v) { case (x, typ) =>
       for (typ2 <- Future.successful(translateTyp(typ))) yield (x, typ2)
     }
 
     for (vars <- IsabelleOps.addVars(prop).retrieve;
-         vars2 <- translateTyps(vars);
-         frees <- IsabelleOps.addFrees(prop).retrieve;
-         frees2 <- translateTyps(frees))
+//         vars2 <- translateTyps(vars);
+         frees <- IsabelleOps.addFrees(prop).retrieve
+//         frees2 <- translateTyps(frees)
+         )
     yield {
-      val vars3 = vars2.reverse map { case ((name, index), typ) =>
+      val vars3 = vars.reverse map { case ((name, index), typ) =>
         val name2 = mapName(name = name, extra = index, category = Namespace.Var)
-        s"($name2: $typ)"
+        ValueVariable(fullName = name2, typ = typ)
+//        s"($name2: $typ)"
       }
-      val frees3 = frees2.reverse map { case (name, typ) =>
+      val frees3 = frees.reverse map { case (name, typ) =>
         val name2 = mapName(name, category = Namespace.Free)
-        s"($name2: $typ)"
+        ValueVariable(fullName = name2, typ = typ)
+//        s"($name2: $typ)"
       }
-      (frees3 ++ vars3).mkString(" ")
+      (frees3 ++ vars3) // .mkString(" ")
     }
   }
 
@@ -149,22 +157,6 @@ object Utils {
     translateTerm(cleanDuplicateAbsNames(term, used = env.toSet), env = env, defaultAllBut = defaultAllBut, constants = constants)
 
 
-  def mkCord(sep: Cord, cords: IterableOnce[Cord]): Cord = {
-    var result = Cord.monoid.zero
-    var first = true
-    for (cord <- cords) {
-      if (first)
-        result = cord
-      else
-        result = result ++ sep ++ cord
-      first = false
-    }
-    result
-  }
-
-  def mkCord(sep: String, cords: IterableOnce[Cord]): Cord =
-    mkCord(Cord(sep), cords)
-
   extension[A] (list: List[A]) {
     def zipStrict[B](other: List[B]): List[(A, B)] = list match
       case head :: tail => other match
@@ -175,9 +167,42 @@ object Utils {
         case Nil => Nil
   }
 
+  extension[A, B >: A : Show] (iterable: IterableOnce[A]) {
+    def mkCord(sep: Cord): Cord = {
+      var result = Cord.monoid.zero
+      var first = true
+      for (x <- iterable.iterator) {
+        if (first)
+          result = (x:B).show
+        else
+          result = result ++ sep ++ (x:B).show
+        first = false
+      }
+      result
+    }
+
+    def mkCord(sep: String): Cord = mkCord(Cord(sep))
+  }
+
   def substituteTypArgs(typArgs: List[Typ], subst: IterableOnce[(TypeVariable, Typ)]): Future[List[Typ]] = {
     val subst2: List[(Typ, Typ)] = subst.iterator.map { case (t, u) => (t.typ, u) }.toList
     val typArgs2 = typArgs.map(IsabelleOps.substituteTyp(subst2, _).retrieve)
     Future.sequence(typArgs2)
   }
+
+  def parenList(terms: IterableOnce[OutputTerm], parens: String = "()", sep: String = " "): Cord = {
+    if (parens == "()")
+      terms.iterator.map(Parentheses(_).toCord).mkCord(sep)
+    else {
+      val open = Cord(parens.substring(0,1))
+      val close = Cord(parens.substring(1,2))
+      terms.iterator.map(t => cord"$open$t$close").mkCord(sep)
+    }
+  }
+
+  given Conversion[String, Cords] with
+    inline def apply(string: String): Cords = Cords.trivial(Cord(string))
+
+  extension (string: String)
+    inline def toCord = Cord(string)
 }

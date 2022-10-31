@@ -1,5 +1,7 @@
 package isabelle2scala2
 
+import scala.language.implicitConversions
+
 import de.unruh.isabelle.pure.Proofterm.PThm
 
 import java.io.PrintWriter
@@ -12,13 +14,16 @@ import scala.collection.mutable.ListBuffer
 import scala.concurrent.Future
 import scalaz.syntax.all.given
 import OutputTerm.given
+import OutputTerm.showOutputTerm
 import scalaz.Scalaz.longInstance
-import Utils.zipStrict
+import Utils.{zipStrict, given}
 
 //noinspection UnstableApiUsage
-case class Theorem(name: String, serial: Serial, axioms: List[Axiom#Instantiated],
+case class Theorem(fullName: String, name: String, serial: Serial, axioms: List[Axiom#Instantiated],
                    typArgs : List[TypeVariable]) {
   override def toString: String = s"Theorem(${name}@${serial})"
+
+  inline def atIdentifier: Identifier = Identifier(fullName, at = true)
 
   class Instantiated(val typs: List[Typ], val axioms: List[Axiom#Instantiated]) {
     inline def theorem: Theorem.this.type = Theorem.this
@@ -55,37 +60,39 @@ object Theorem {
     val propString = Utils.translateTermClean(prop, constants = constantsBuffer)
     val propConstants = constantsBuffer.toList
 
-    val constants = propConstants // TODO include the ones in proof
-    val constsString = constants map { c => Parentheses(c.outputTerm) } mkString " "
-
-    for (typArgs <- Utils.typParametersOfProp(prop);
-         valArgString <- Utils.valParametersOfProp(prop);
+    for (typParams <- Utils.typParametersOfProp(prop);
+         valParams <- Utils.valParametersOfProp(prop);
          axioms <- allAxiomsInProof(proof))
     yield {
-      val axiomsString = axioms map { a => Parentheses(a.outputTerm) } mkString " "
+      for (axiom <- axioms)
+        constantsBuffer.addAll(axiom.constants)
+      val constants = constantsBuffer.result()
 
       output.synchronized {
         output.println(cord"/-- Isabelle lemma $name (${pthm.header.serial}): ${prop.pretty(ctxt)} -/")
-        output.println(s"theorem $fullName")
-        if (typArgs.nonEmpty) {
-          val typArgString : Cord = Utils.mkCord(" ", typArgs map { a => cord"{${a.outputTerm}}" })
-          output.println(s"     /- Type args -/  $typArgString")
+        output.println(cord"theorem $fullName")
+        if (typParams.nonEmpty) {
+          val typArgString : Cord = Utils.parenList(typParams.map(_.outputTerm), parens="{}")
+          output.println(cord"     /- Type params -/  $typArgString")
         }
-        if (constsString.nonEmpty)
-          output.println(s"     /- Constants -/  $constsString")
+        if (constants.nonEmpty)
+          val constsString = Utils.parenList(constants.map(_.outputTerm))
+          output.println(cord"     /- Constants -/    $constsString")
         if (axioms.nonEmpty)
-          output.println(s"     /- Axioms -/     $axiomsString")
-        if (valArgString.nonEmpty)
-          output.println(s"     /- Value args -/ $valArgString")
-        output.println(s"  : $propString :=")
+          val axiomsString = Utils.parenList(axioms.map(_.outputTerm), sep = "\n                        ")
+          output.println(cord"     /- Axioms -/       $axiomsString")
+        if (valParams.nonEmpty)
+          val valParamString : Cord = Utils.parenList(valParams.map(_.outputTerm))
+          output.println(cord"     /- Value params -/ $valParamString")
+        output.println(cord"  : $propString :=")
         output.println()
-        output.println(s"  sorry")
+        output.println(cord"  proof_omitted")
         output.println()
         output.flush()
       }
 
 //      println(s"Done: ${pthm.header.name}")
-      Theorem(name = name, serial = pthm.header.serial, axioms = axioms, typArgs = typArgs)
+      Theorem(fullName = fullName, name = name, serial = pthm.header.serial, axioms = axioms, typArgs = typParams)
     }
   }
 

@@ -7,6 +7,8 @@ import scalaz.Cord
 
 import scala.language.implicitConversions
 import OutputTerm.given
+import Utils.given
+import scalaz.Cord.CordInterpolator.Cords
 
 sealed trait OutputTerm {
   def toCord: Cord
@@ -22,21 +24,29 @@ object OutputTerm {
   implicit object showOutputTerm extends Show[OutputTerm] {
     override def show(f: OutputTerm): Cord = f.toCord
   }
-  // There is scalaz.std.StringInstances.stringInstance but that encloses strings in "".
+
+  given Conversion[OutputTerm, Cords] with
+    def apply(t: OutputTerm): Cords = Cords.trivial(t.toCord)
+
+/*  // There is scalaz.std.StringInstances.stringInstance but that encloses strings in "".
   implicit object showString extends Show[String] {
     override def show(f: String): Cord = Cord(f)
     override def shows(f: String): String = f
-  }
+  }*/
 }
 
 case class Comment(comment: String, term: OutputTerm) extends OutputTerm {
   assert(!comment.contains("/-"))
   assert(!comment.contains("-/"))
-  override def toCord: Cord = cord"/-$comment-/ $term"
+  override def toCord: Cord = cord"/- $comment -/ $term"
 }
 
 case class Identifier(name: String, at: Boolean = false) extends OutputTerm {
   override def toCord: Cord = if (at) cord"@$name" else Cord(name)
+}
+
+object Identifier {
+  val Type: Identifier = Identifier("Type")
 }
 
 case class Application(head: OutputTerm, arg: OutputTerm) extends OutputTerm {

@@ -20,7 +20,7 @@ case class Constant(fullName: String, name: String, typ: Typ, typString: OutputT
     Instantiated(fullName = fullName, typ = typ, typArgs = typArgs)
   }
 
-  inline def identifier: Identifier = Identifier(fullName)
+//  inline def identifier: Identifier = Identifier(fullName)
   inline def atIdentifier: Identifier = Identifier(fullName, at = true)
 
   def instantiate(typ: Typ) : Instantiated =
