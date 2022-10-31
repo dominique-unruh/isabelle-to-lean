@@ -1,9 +1,9 @@
-package isabelle2scala2
+package isabelle2lean
 
 import de.unruh.isabelle.pure.Proofterm.PThm
 import de.unruh.isabelle.pure.Term
-import isabelle2scala2.Globals.given
-import isabelle2scala2.Theorem.Serial
+import isabelle2lean.Globals.given
+import isabelle2lean.Theorem.Serial
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable

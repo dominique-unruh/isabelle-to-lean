@@ -1,4 +1,4 @@
-package isabelle2scala2
+package isabelle2lean
 
 import de.unruh.isabelle.pure.Typ
 

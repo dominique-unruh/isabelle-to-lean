@@ -1,4 +1,4 @@
-package isabelle2scala2
+package isabelle2lean
 
 import scala.language.implicitConversions
 
@@ -6,8 +6,8 @@ import de.unruh.isabelle.pure.{Abs, App, Bound, Const, Free, TFree, TVar, Term, 
 import de.unruh.isabelle.pure.Implicits.given
 import de.unruh.isabelle.mlvalue.Implicits.given
 import Globals.given
-import isabelle2scala2.Main.await
-import isabelle2scala2.Naming.mapName
+import isabelle2lean.Main.await
+import isabelle2lean.Naming.mapName
 import scalaz.{Cord, Monoid, Show}
 
 import java.io.PrintWriter

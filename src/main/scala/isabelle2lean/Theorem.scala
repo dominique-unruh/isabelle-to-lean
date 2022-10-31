@@ -1,4 +1,4 @@
-package isabelle2scala2
+package isabelle2lean
 
 import scala.language.implicitConversions
 
@@ -7,7 +7,7 @@ import de.unruh.isabelle.pure.Proofterm.PThm
 import java.io.PrintWriter
 import Globals.{ctxt, given}
 import de.unruh.isabelle.pure.{Proofterm, Term, Typ}
-import isabelle2scala2.Theorem.Serial
+import isabelle2lean.Theorem.Serial
 import scalaz.{Cord, Show}
 
 import scala.collection.mutable.ListBuffer
@@ -128,3 +128,68 @@ object Theorem {
       yield axiomsBuffer.result()
   }
 }
+
+
+/*
+
+From first attempt:
+
+
+//noinspection UnstableApiUsage
+object Theorem {
+  case class Env(propEnv: List[String] = Nil, termEnv: List[String] = Nil,
+                 boundFree: Set[String] = Set.empty, boundVar: Set[(String, Int)] = Set.empty)
+
+  /** Assumption: All names in AbsP are non-empty and no shadowing */
+  def proofToString(proof: Proofterm, env: Env): Future[OutputTerm] = {
+    def intersperseWildcards(terms: Seq[OutputTerm]): Seq[OutputTerm] = terms.flatMap(t => Seq(t, Wildcard))
+
+    proof match {
+      case Proofterm.MinProof =>
+        throw new RuntimeException("MinProof")
+      case Proofterm.AppP(proof1, proof2) =>
+        val out1future = proofToString(proof1, env)
+        val out2future = proofToString(proof2, env)
+        for (out1 <- out1future;
+             out2 <- out2future)
+        yield Application(out1, out2)
+      case Proofterm.Appt(proof, term) =>
+        assert(term.nonEmpty)
+        for (out <- proofToString(proof, env))
+          yield Application(out,
+            Main.translateTermClean(term.get, env = env.termEnv, defaultAllBut = Some((env.boundVar, env.boundFree))))
+      case Proofterm.AbsP(name, term, proof) =>
+        assert(term.nonEmpty)
+        assert(name.nonEmpty)
+        val name2 = Naming.mapName(name, category = Namespace.ProofAbsVar)
+        for (out <- proofToString(proof, env.copy(propEnv = name2 :: env.propEnv)))
+          yield Abstraction(name2,
+            Main.translateTermClean(term.get, env = env.termEnv, defaultAllBut = Some((env.boundVar, env.boundFree))), out)
+      case Proofterm.Abst(name, typ, proof) =>
+        assert(typ.nonEmpty)
+        assert(name.nonEmpty)
+        val name2 = Naming.mapName(name, category = Namespace.ProofAbsVarTerm)
+        for (out <- proofToString(proof, env.copy(termEnv = name2 :: env.termEnv)))
+          yield Abstraction(name2, Main.translateTyp(typ.get), out)
+      case Proofterm.Hyp(term) =>
+        ???
+      case Proofterm.PAxm(name, prop, typ) =>
+        val axiom = Axioms.compute(name, prop)
+        assert(typ.nonEmpty)
+        Future.successful(Application(Identifier(axiom.fullName, at = true), intersperseWildcards(typ.get.map(Main.translateTyp)): _*))
+      case Proofterm.PBound(index) =>
+        Future.successful(Identifier(env.propEnv(index)))
+      case Proofterm.OfClass(typ, clazz) =>
+        ???
+      case Proofterm.Oracle(name, term, typ) =>
+        ???
+      case pthm: PThm =>
+        assert(pthm.header.types.nonEmpty)
+        val types = pthm.header.types.get.map(Main.translateTyp)
+        for (theorem <- Theorems.compute(pthm))
+          yield Application(Identifier(theorem.fullName, at = true), intersperseWildcards(types): _*)
+    }
+  }
+}
+
+*/

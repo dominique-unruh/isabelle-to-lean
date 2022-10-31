@@ -1,4 +1,4 @@
-package isabelle2scala2
+package isabelle2lean
 
 import scala.collection.generic.DefaultSerializable
 import scala.collection.mutable.ListBuffer
