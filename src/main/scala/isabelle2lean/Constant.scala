@@ -1,7 +1,6 @@
 package isabelle2lean
 
 import scala.language.implicitConversions
-
 import de.unruh.isabelle.pure.{TVar, Typ}
 import Globals.given
 import de.unruh.isabelle.mlvalue.Implicits.given
@@ -13,8 +12,11 @@ import Globals.{ctxt, given}
 import scalaz.Cord
 import scalaz.syntax.show.cordInterpolator
 import Utils.given_Conversion_String_Cords
+import isabelle2lean.Constant.{lookups1, lookups2, misses}
 
-// TODO Use ITyp
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+
 case class Constant(typeFullName: String, defFullName: Option[String], name: String, typ: ITyp, typArgs: List[TypeVariable]) {
   override def toString: String = s"Const($name)"
 
@@ -28,17 +30,29 @@ case class Constant(typeFullName: String, defFullName: Option[String], name: Str
 
   override def hashCode(): Int = ???
 
-  // TODO: Use a cache of instantiations
-  def instantiate(typArgs: List[ITyp]): Instantiated = {
-    val fullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.ConstantInstantiated)
-    Instantiated(fullName = fullName, typ = typ, typArgs = typArgs)
+  def instantiate(typArgs: List[ITyp]): Future[Instantiated] = {
+    lookups2.incrementAndGet()
+    cache.computeIfAbsent(typArgs, { _ =>
+      misses.incrementAndGet()
+      Future {
+        val fullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.ConstantInstantiated)
+        Instantiated(fullName = fullName, typ = typ, typArgs = typArgs)
+      }})
   }
 
   inline def atIdentifier: Identifier = Identifier(typeFullName, at = true)
 
-  // TODO: Use a cache of instantiations
-  def instantiate(typ: ITyp) : Instantiated =
-    instantiate(typArgsFromTyp(typ))
+  private val cache = new ConcurrentHashMap[ITyp | List[ITyp], Future[Instantiated]]()
+
+  def instantiate(typ: ITyp) : Future[Instantiated] = {
+    lookups1.incrementAndGet()
+    cache.computeIfAbsent(typ, { _ => Future {
+      // We wrap this into Future otherwise the call to `instantiate` raises a "recursive update" exception
+      lookups2.decrementAndGet()
+      instantiate(typArgsFromTyp(typ)) }
+      .flatten
+    })
+  }
 
   case class Instantiated(fullName: String, typ: ITyp, typArgs: List[ITyp]) {
     inline def constant: Constant.this.type = Constant.this
@@ -50,8 +64,9 @@ case class Constant(typeFullName: String, defFullName: Option[String], name: Str
       case _ => false
 
     def substitute(subst: IterableOnce[(TypeVariable, ITyp)]): Future[Instantiated] =
-      for (typArgs2 <- Utils.substituteTypArgs(typArgs, subst))
-        yield Constant.this.instantiate(typArgs2)
+      for (typArgs2 <- Utils.substituteTypArgs(typArgs, subst);
+           inst <- Constant.this.instantiate(typArgs2))
+        yield inst
 
     def asParameterTerm: OutputTerm =
       TypeConstraint(identifier,
@@ -107,4 +122,12 @@ object Constant {
         defFullName = defFullName)
     }
   }
+
+  private val lookups1 = new AtomicInteger
+  private val lookups2 = new AtomicInteger
+  private val misses = new AtomicInteger
+
+  def printStats(): Unit =
+    println(s"Constant stats: ${misses.get}/${lookups1.get}+${lookups2.get}")
+
 }

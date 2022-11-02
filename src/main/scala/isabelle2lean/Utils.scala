@@ -1,7 +1,6 @@
 package isabelle2lean
 
 import scala.language.implicitConversions
-
 import de.unruh.isabelle.pure.{Abs, App, Bound, Const, Free, TFree, TVar, Term, Typ, Type, Var}
 import de.unruh.isabelle.pure.Implicits.given
 import de.unruh.isabelle.mlvalue.Implicits.given
@@ -12,12 +11,14 @@ import scalaz.{Cord, Monoid, Show}
 
 import java.io.PrintWriter
 import scala.collection.mutable
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import Utils.given
 import scalaz.Cord.CordInterpolator.Cords
 import scalaz.Cord.show
 import scalaz.syntax.all.ToShowOps
 import scalaz.Scalaz.cordInterpolator
+
+import scala.concurrent.duration.Duration
 
 object Utils {
   def runAsDaemon(task: => Any): Unit = {
@@ -130,7 +131,7 @@ object Utils {
       }
     case Const(name, typ) =>
       val const: Constant = await(Constants.compute(name))
-      val instantiated: const.Instantiated = const.instantiate(ITyp(typ))
+      val instantiated: const.Instantiated = Await.result(const.instantiate(ITyp(typ)), Duration.Inf)
       if (!const.isDefined)
         constants += instantiated
       //      val args = const.instantiate(typ).map(translateTyp_OLD)
@@ -195,4 +196,12 @@ object Utils {
 
   extension (string: String)
     inline def toCord = Cord(string)
+
+  def printStats(): Unit = {
+    val active = Globals.executor.getActiveCount
+    val size = Globals.executor.getPoolSize
+    println(s"Executor: $active/$size")
+    ITyp.printStats()
+    Constant.printStats()
+  }
 }

@@ -94,8 +94,8 @@ object Main {
     for (future <- futures)
       Await.result(future, Duration.Inf)
 
-    println(s"Done. ${Globals.executor.getActiveCount}")
-    ITyp.printStats()
+    println(s"Done.")
+    Utils.printStats()
     stopWatch.stop()
     System.out.println("Total time: " + stopWatch.formatTime())
 

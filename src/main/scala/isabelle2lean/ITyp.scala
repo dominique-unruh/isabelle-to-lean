@@ -18,7 +18,7 @@ final class ITyp private(val uniqueHashCode: Hash, mlValue: MLValue[Typ])(implic
     case that : ITyp => this.uniqueHashCode == that.uniqueHashCode
     case _ => false
   lazy val outputTerm: OutputTerm = ITyp.translateTyp(typ)
-  lazy val pretty: String = new MLValueTyp(mlValue).pretty(Globals.ctxt)
+  lazy val pretty: String = MLValueTyp(mlValue).pretty(Globals.ctxt)
   inline def typ: MLValueTyp = MLValueTyp(mlValue)
 }
 
