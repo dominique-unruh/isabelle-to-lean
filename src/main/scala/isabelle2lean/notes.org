@@ -1,9 +1,20 @@
 # Timings
 
+All done on my laptop, with power supply attached
+
 * a2d28fd – Using ITyp
 ** conjI:         17s
 ** add_0_right:   17m
-** binomial_eq_0: ?
+** binomial_eq_0: (looks stuck)
+
 * d7790bd – Cache for Constant.Instantiated
 ** conjI:         15s
-** add_0_right:
+** add_0_right:   16m
+
+* 83d7e51 – Cache for Axiom.Instantiated
+** conjI:         13s
+** add_0_right:   13m
+
+* 9687ed7 – Cache for Theorem.Instantiated
+** conjI:         12s
+** add_0_right:   ?

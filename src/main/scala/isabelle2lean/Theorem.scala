@@ -69,8 +69,10 @@ object Theorem {
       suggestion = if (name.nonEmpty) name else "thm_" + pthm.header.serial,
       category = Namespace.Theorem)
 
+    // TODO: Do we need the fully reconstructed proof?
     val proof: Proofterm = pthm.fullProof(ctxt.theoryOf)
-    Future { triggerAllTheorems(proof) }
+    if (Globals.tryToParallelize)
+      Future { triggerAllTheorems(proof) }
 
     val constantsBuffer = UniqueListBuffer[Constant#Instantiated]()
     val propString = Utils.translateTermClean(prop, constants = constantsBuffer)
