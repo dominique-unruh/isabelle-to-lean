@@ -71,7 +71,7 @@ object Naming {
   private def makeSuffix(value: Any): String = value match
     case list : List[_] => list.map(makeSuffix).mkString("_")
     case int: Int => int.toString
-    case typ: Typ => typ.pretty(ctxt)
+    case typ: ITyp => typ.pretty
     case _: Unit => ""
 
   def mapName(name: String,

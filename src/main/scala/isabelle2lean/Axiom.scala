@@ -28,7 +28,8 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
     case _ => false
   }
 
-  def instantiate(typArgs: List[Typ]): Future[Instantiated] = {
+  // TODO: Use a cache of instantiations
+  def instantiate(typArgs: List[ITyp]): Future[Instantiated] = {
     val fullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.AxiomInstantiated)
     val constants2 = constants.map(_.substitute(typParams.zipStrict(typArgs)))
     for (constants3 <- Future.sequence(constants2))
@@ -38,7 +39,7 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
 
   inline def atIdentifier: Identifier = Identifier(fullName, at = true)
 
-  case class Instantiated(fullName: String, typArgs: List[Typ], constants: List[Constant#Instantiated]) {
+  case class Instantiated(fullName: String, typArgs: List[ITyp], constants: List[Constant#Instantiated]) {
     inline def axiom: Axiom = Axiom.this
 
     def shortSummary: Cord = {
@@ -46,7 +47,7 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
       if (typArgs.isEmpty)
         summary1
       else
-        cord"$summary1 for ${typArgs.map(_.pretty(ctxt).toCord).mkCord(", ")}"
+        cord"$summary1 for ${typArgs.map(_.pretty.toCord).mkCord(", ")}"
     }
 
     /** Returns "instantiated-fullName : axiom-fullName typArgs" */
@@ -54,12 +55,12 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
       Comment(shortSummary.shows,
         TypeConstraint(identifier,
           Application(
-            Application(axiom.atIdentifier, typArgs.map(Utils.translateTyp) :_*),
+            Application(axiom.atIdentifier, typArgs.map(_.outputTerm) :_*),
             constants.map(_.asUsageTerm) :_*)))
 
     inline def identifier: Identifier = Identifier(fullName)
 
-    def substitute(subst: IterableOnce[(TypeVariable, Typ)]): Future[Instantiated] =
+    def substitute(subst: IterableOnce[(TypeVariable, ITyp)]): Future[Instantiated] =
       for (typArgs2 <- Utils.substituteTypArgs(typArgs, subst);
            inst <- Axiom.this.instantiate(typArgs2))
         yield inst

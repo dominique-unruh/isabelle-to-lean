@@ -18,6 +18,7 @@ object Globals {
       val size = executor.getPoolSize
 //      println()
       println(s"Executor: $active/$size")
+      ITyp.printStats()
 //      println()
 
 //      for ((thread: Thread) <- Thread.getAllStackTraces.asScala.keySet) {

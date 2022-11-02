@@ -25,7 +25,11 @@ case class Theorem(fullName: String, name: String, serial: Serial, axioms: List[
 
   inline def atIdentifier: Identifier = Identifier(fullName, at = true)
 
-  class Instantiated(val typs: List[Typ], val axioms: List[Axiom#Instantiated]) {
+  override def equals(obj: Any): Boolean = ???
+
+  override def hashCode(): Int = ???
+
+  class Instantiated(val typs: List[ITyp], val axioms: List[Axiom#Instantiated]) {
     inline def theorem: Theorem.this.type = Theorem.this
     override def equals(obj: Any): Boolean = ???
     override def hashCode(): Int = ???
@@ -33,6 +37,7 @@ case class Theorem(fullName: String, name: String, serial: Serial, axioms: List[
 
   def instantiate(pthm: PThm): Future[Instantiated] = {
     val typs = pthm.header.types.getOrElse(throw RuntimeException(s"No type instantiation provided in theorem $pthm"))
+      .map(ITyp.apply)
     val typargs = this.typArgs
     val subst = typargs.zipStrict(typs)
     for (axioms <- Future.sequence( this.axioms.map(_.substitute(subst))) )
@@ -55,10 +60,11 @@ object Theorem {
       category = Namespace.Theorem)
 
     val proof: Proofterm = pthm.fullProof(ctxt.theoryOf)
+    Future { triggerAllTheorems(proof) }
 
     val constantsBuffer = UniqueListBuffer[Constant#Instantiated]()
     val propString = Utils.translateTermClean(prop, constants = constantsBuffer)
-    val propConstants = constantsBuffer.toList
+//    val propConstants = constantsBuffer.toList
 
     for (typParams <- Utils.typParametersOfProp(prop);
          valParams <- Utils.valParametersOfProp(prop);
@@ -96,6 +102,21 @@ object Theorem {
     }
   }
 
+
+  /** Triggers computation of all invoked theorems to increase parallelism. */
+  def triggerAllTheorems(proof: Proofterm): Unit = proof match
+    case _: Proofterm.MinProof.type =>
+    case Proofterm.AppP(proof1, proof2) => triggerAllTheorems(proof1); triggerAllTheorems(proof2)
+    case Proofterm.Appt(proof, term) => triggerAllTheorems(proof)
+    case Proofterm.AbsP(name, term, proof) => triggerAllTheorems(proof)
+    case Proofterm.Abst(name, typ, proof) => triggerAllTheorems(proof)
+    case _: Proofterm.Hyp =>
+    case _: Proofterm.PAxm =>
+    case _: Proofterm.PBound =>
+    case _: Proofterm.OfClass =>
+    case _: Proofterm.Oracle =>
+    case pthm: PThm => Theorems.compute(pthm)
+
   def allAxiomsInProof(proof: Proofterm): Future[List[Axiom#Instantiated]] = {
     val axiomsBuffer = new UniqueListBuffer[Axiom#Instantiated]
 
@@ -113,13 +134,13 @@ object Theorem {
       case Proofterm.PAxm(name, term, typs) =>
         for (axiom <- Axioms.compute(name, term);
              _ = assert(typs.nonEmpty);
-             instantiated <- axiom.instantiate(typs.get))
+             instantiated <- axiom.instantiate(typs.get.map(ITyp.apply)))
           yield
             axiomsBuffer.addOne(instantiated)
       case Proofterm.PBound(index) => Future.unit
       case Proofterm.OfClass(typ, clazz) => ???
       case Proofterm.Oracle(name, term, typ) => ???
-      case pthm@PThm(header, body) =>
+      case pthm @ PThm(header, body) =>
         for (thm <- Theorems.compute(pthm);
              inst <- thm.instantiate(pthm))
           yield

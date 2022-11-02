@@ -4,10 +4,6 @@ set_option autoImplicit false
 axiom proof_omitted {p: Prop}: p
 
 def prop := Prop
--- def Pure_imp x y := x -> y
--- def Pure_eq {a: Type} (x y : a) := x = y
--- def Pure_all {_a0 : Type} (f: _a0 -> prop) := ∀x, f x
--- def Pure_prop (x: Prop) := x
 def HOL_bool := Bool
 inductive itself (a: Type) : Type where
   | itself : itself a

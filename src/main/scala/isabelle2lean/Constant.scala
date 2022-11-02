@@ -14,26 +14,33 @@ import scalaz.Cord
 import scalaz.syntax.show.cordInterpolator
 import Utils.given_Conversion_String_Cords
 
-case class Constant(typeFullName: String, defFullName: Option[String], name: String, typ: Typ, typString: OutputTerm,
-                    typArgs: List[TypeVariable]) {
+// TODO Use ITyp
+case class Constant(typeFullName: String, defFullName: Option[String], name: String, typ: ITyp, typArgs: List[TypeVariable]) {
   override def toString: String = s"Const($name)"
 
   def isDefined: Boolean = defFullName.nonEmpty
 
-  def typArgsFromTyp(typ: Typ): List[Typ] =
-    IsabelleOps.constTypargs(Globals.thy, name, typ).retrieveNow
+  def typArgsFromTyp(typ: ITyp): List[ITyp] =
+    IsabelleOps.constTypargs(Globals.thy, name, typ.typ).retrieveNow
+      .map(ITyp.apply)
 
-  def instantiate(typArgs: List[Typ]): Instantiated = {
+  override def equals(obj: Any): Boolean = ???
+
+  override def hashCode(): Int = ???
+
+  // TODO: Use a cache of instantiations
+  def instantiate(typArgs: List[ITyp]): Instantiated = {
     val fullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.ConstantInstantiated)
     Instantiated(fullName = fullName, typ = typ, typArgs = typArgs)
   }
 
   inline def atIdentifier: Identifier = Identifier(typeFullName, at = true)
 
-  def instantiate(typ: Typ) : Instantiated =
+  // TODO: Use a cache of instantiations
+  def instantiate(typ: ITyp) : Instantiated =
     instantiate(typArgsFromTyp(typ))
 
-  case class Instantiated(fullName: String, typ: Typ, typArgs: List[Typ]) {
+  case class Instantiated(fullName: String, typ: ITyp, typArgs: List[ITyp]) {
     inline def constant: Constant.this.type = Constant.this
 
     override def hashCode(): Int = fullName.hashCode
@@ -42,18 +49,18 @@ case class Constant(typeFullName: String, defFullName: Option[String], name: Str
       case inst : Instantiated => fullName == inst.fullName
       case _ => false
 
-    def substitute(subst: IterableOnce[(TypeVariable, Typ)]): Future[Instantiated] =
+    def substitute(subst: IterableOnce[(TypeVariable, ITyp)]): Future[Instantiated] =
       for (typArgs2 <- Utils.substituteTypArgs(typArgs, subst))
         yield Constant.this.instantiate(typArgs2)
 
     def asParameterTerm: OutputTerm =
       TypeConstraint(identifier,
-        Application(constant.atIdentifier, typArgs.map(Utils.translateTyp): _*))
+        Application(constant.atIdentifier, typArgs.map(_.outputTerm): _*))
 
     def asUsageTerm: OutputTerm = defFullName match
       case Some(defName) =>
         Application(Identifier(defName, at = true),
-          typArgs.map(Utils.translateTyp) :_*)
+          typArgs.map(_.outputTerm) :_*)
       case None => identifier
 
     inline def identifier: Identifier = Identifier(fullName)
@@ -68,9 +75,10 @@ object Constant {
     val defFullName = if (definition.isEmpty) None
       else Some(Naming.mapName(name = name, category = Namespace.ConstantDef))
 
-    for (typ <- IsabelleOps.theConstType(Globals.thy, name).retrieve;
-         typParams0 <- IsabelleOps.constTypargs(Globals.thy, name, typ).retrieve)
+    for (typ0 <- IsabelleOps.theConstType(Globals.thy, name).retrieve;
+         typParams0 <- IsabelleOps.constTypargs(Globals.thy, name, typ0).retrieve)
     yield {
+      val typ = ITyp(typ0)
       val typParams = typParams0 map {
         case typ @ TVar(name, index, sort) =>
           //      assert(sort.isEmpty, sort)
@@ -78,25 +86,24 @@ object Constant {
           TypeVariable(name2, typ = typ)
         case typ => throw new AssertionError(s"createConstant: $typ")
       }
-      val typOutputTerm = Utils.translateTyp(typ)
       val typParamString = if (typParams.isEmpty)
         Cord.monoid.zero
       else
         Cord(" ") ++ Utils.parenList(typParams.map(_.outputTerm))
 
       output.synchronized {
-        output.println(cord"/-- Type of Isabelle constant $name :: ${typ.pretty(ctxt)} -/")
-        output.println(cord"def $typeFullName $typParamString := $typOutputTerm")
+        output.println(cord"/-- Type of Isabelle constant $name :: ${typ.pretty} -/")
+        output.println(cord"def $typeFullName $typParamString := ${typ.outputTerm}")
         output.println()
         if (definition.nonEmpty) {
-          output.println(cord"/-- Def of Isabelle constant $name :: ${typ.pretty(ctxt)} -/")
+          output.println(cord"/-- Def of Isabelle constant $name :: ${typ.pretty} -/")
           output.println(cord"${if (noncomputable) "noncomputable " else Cord.monoid.zero}def ${defFullName.get}$typParamString : $typeFullName $typParamString")
           output.println(cord"  := ${definition.get}")
           output.println()
         }
         output.flush()
       }
-      Constant(name = name, typ = typ, typArgs = typParams, typString = typOutputTerm, typeFullName = typeFullName,
+      Constant(name = name, typ = typ, typArgs = typParams, typeFullName = typeFullName,
         defFullName = defFullName)
     }
   }

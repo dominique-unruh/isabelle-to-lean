@@ -18,6 +18,7 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Awaitable, Future}
 import scala.jdk.CollectionConverters.given
 import Utils.given
+import org.apache.commons.lang3.time.StopWatch
 import scalaz.Cord
 
 //noinspection UnstableApiUsage
@@ -42,6 +43,9 @@ object Main {
 
 
   def main(args: Array[String]): Unit = {
+    val stopWatch = new StopWatch("Time spent")
+    stopWatch.start()
+
     // We can get all theorems from a thy (incl ancestors) via "Global_Theory.all_thms_of thy false"
     val thmNames = Seq(
       "HOL.conjI",
@@ -101,8 +105,11 @@ object Main {
       Await.result(future, Duration.Inf)
 
     println(s"Done. ${Globals.executor.getActiveCount}")
+    ITyp.printStats()
+    stopWatch.stop()
+    System.out.println(stopWatch.getTime());
 
-//    Globals.executor.shutdown()
+    //    Globals.executor.shutdown()
 
     output.synchronized {
       output.close()
@@ -115,7 +122,7 @@ object Main {
 //    IOUtils.toString(getClass.getResource("/preamble.lean"), "utf-8")
     Files.readString(Paths.get("src/main/lean/preamble.lean"))
 
-  // TODO: check for duplicate Var/Free with different types
+/*  // TODO: check for duplicate Var/Free with different types
   // TODO: check for duplicate TFree/TVar with different sorts
   // TODO use futures
   def argumentsOfProp_OLD(prop: Term): String = {
@@ -135,14 +142,14 @@ object Main {
 
     val vars2 = vars map { case ((name, index), typ) =>
       val name2 = mapName(name = name, extra = index, category = Namespace.Var)
-      s"($name2 : ${Utils.translateTyp(typ)})"
+      s"($name2 : ${ITyp(typ).outputTerm})"
     }
 
     val frees2 = frees map { case (name, typ) =>
       val name2 = mapName(name, category = Namespace.Free)
-      s"($name2 : ${Utils.translateTyp(typ)})"
+      s"($name2 : ${ITyp(typ).outputTerm})"
     }
 
     (targs ++ frees2 ++ vars2).mkString(" ")
-  }
+  }*/
 }

@@ -29,7 +29,7 @@ object Utils {
   // TODO: check for duplicate Var/Free with different types
   def valParametersOfProp(prop: Term): Future[List[ValueVariable]] = {
     def translateTyps[A](v: Seq[(A, Typ)]) = Future.traverse(v) { case (x, typ) =>
-      for (typ2 <- Future.successful(translateTyp(typ))) yield (x, typ2)
+      for (typ2 <- Future.successful(ITyp(typ).outputTerm)) yield (x, typ2)
     }
 
     for (vars <- IsabelleOps.addVars(prop).retrieve;
@@ -40,12 +40,12 @@ object Utils {
     yield {
       val vars3 = vars.reverse map { case ((name, index), typ) =>
         val name2 = mapName(name = name, extra = index, category = Namespace.Var)
-        ValueVariable(fullName = name2, typ = typ)
+        ValueVariable(fullName = name2, typ = ITyp(typ))
 //        s"($name2: $typ)"
       }
       val frees3 = frees.reverse map { case (name, typ) =>
         val name2 = mapName(name, category = Namespace.Free)
-        ValueVariable(fullName = name2, typ = typ)
+        ValueVariable(fullName = name2, typ = ITyp(typ))
 //        s"($name2: $typ)"
       }
       (frees3 ++ vars3) // .mkString(" ")
@@ -98,18 +98,6 @@ object Utils {
           Abs(x2, typ, bodyClean)
   }
 
-  /** Assumptions: no TVars or TFree have same name but different types */
-  // TODO check
-  def translateTyp(typ: Typ): OutputTerm = typ match {
-    case Type("fun", t1, t2) => FunType(translateTyp(t1), translateTyp(t2))
-    case Type("fun", _*) => throw new RuntimeException("should not happen")
-    case Type(tcon, typs@_*) => Application(Identifier(mapName(tcon, category = Namespace.TypeCon)),
-      typs.map(translateTyp): _*)
-    case TVar(name, index, sort) => Identifier(mapName(name = name, extra = index, category = Namespace.TVar))
-    case TFree(name, sort) => Identifier(mapName(name, category = Namespace.TFree))
-  }
-
-
   /** Assumptions:
    * - no TVars or TFree have same name but different types
    * - no empty names in Abs or shadowed names
@@ -118,31 +106,31 @@ object Utils {
   def translateTerm(term: Term, env: List[String],
                     defaultAllBut: Option[(Set[(String, Int)], Set[String])],
                     constants: mutable.Buffer[Constant#Instantiated]): OutputTerm = term match {
-    case App(t, u) => Application({
-      translateTerm(t, env, defaultAllBut, constants)
-    }, translateTerm(u, env, defaultAllBut, constants))
+    case App(t, u) => Application(
+      translateTerm(t, env, defaultAllBut, constants),
+      translateTerm(u, env, defaultAllBut, constants))
     case Abs(name, typ, term) =>
       assert(name.nonEmpty)
       val name2 = mapName(name, category = Namespace.AbsVar)
-      Abstraction(name2, translateTyp(typ), translateTerm(term, name2 :: env, defaultAllBut, constants))
+      Abstraction(name2, ITyp(typ).outputTerm, translateTerm(term, name2 :: env, defaultAllBut, constants))
     case Bound(i) => Identifier(env(i))
     case Var(name, index, typ) =>
       defaultAllBut match {
         case Some((vars, _)) if !vars.contains(name, index) =>
-          Comment(s"?$name.$index", TypeConstraint(Identifier("Classical.ofNonempty"), translateTyp(typ)))
+          Comment(s"?$name.$index", TypeConstraint(Identifier("Classical.ofNonempty"), ITyp(typ).outputTerm))
         case _ =>
           Identifier(mapName(name = name, extra = index, category = Namespace.Var))
       }
     case Free(name, typ) =>
       defaultAllBut match {
         case Some((_, frees)) if !frees.contains(name) =>
-          Comment(name, TypeConstraint(Identifier("Classical.ofNonempty"), translateTyp(typ)))
+          Comment(name, TypeConstraint(Identifier("Classical.ofNonempty"), ITyp(typ).outputTerm))
         case _ =>
           Identifier(mapName(name, category = Namespace.Free))
       }
     case Const(name, typ) =>
       val const: Constant = await(Constants.compute(name))
-      val instantiated: const.Instantiated = const.instantiate(typ)
+      val instantiated: const.Instantiated = const.instantiate(ITyp(typ))
       if (!const.isDefined)
         constants += instantiated
       //      val args = const.instantiate(typ).map(translateTyp_OLD)
@@ -185,10 +173,11 @@ object Utils {
     def mkCord(sep: String): Cord = mkCord(Cord(sep))
   }
 
-  def substituteTypArgs(typArgs: List[Typ], subst: IterableOnce[(TypeVariable, Typ)]): Future[List[Typ]] = {
-    val subst2: List[(Typ, Typ)] = subst.iterator.map { case (t, u) => (t.typ, u) }.toList
-    val typArgs2 = typArgs.map(IsabelleOps.substituteTyp(subst2, _).retrieve)
+  def substituteTypArgs(typArgs: List[ITyp], subst: IterableOnce[(TypeVariable, ITyp)]): Future[List[ITyp]] = {
+    val subst2: List[(Typ, Typ)] = subst.iterator.map { case (t, u) => (t.typ, u.typ) }.toList
+    val typArgs2 = typArgs.map(arg => IsabelleOps.substituteTyp(subst2, arg.typ).retrieve)
     Future.sequence(typArgs2)
+      .map(_.map(ITyp.apply))
   }
 
   def parenList(terms: IterableOnce[OutputTerm], parens: String = "()", sep: String = " "): Cord = {

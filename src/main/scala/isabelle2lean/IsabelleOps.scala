@@ -16,4 +16,5 @@ object IsabelleOps {
   val theConstType = compileFunction[Theory, String, Typ]("fn (thy,name) => Sign.the_const_type thy name")
   val constTypargs = compileFunction[Theory, String, Typ, List[Typ]]("fn (thy,name,typ) => Sign.const_typargs thy (name,typ)")
   val substituteTyp = compileFunction[List[(Typ,Typ)], Typ, Typ]("fn (subst, typ) => typ_subst_atomic subst typ")
+  val uniqueHashCodeTyp = compileFunction[Typ, (Long, Long)](s"let\n${Hash.hashLib}\nin hashAsIntPair hashTyp end")
 }

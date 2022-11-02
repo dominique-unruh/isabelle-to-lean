@@ -2,9 +2,9 @@ package isabelle2lean
 
 import de.unruh.isabelle.pure.Typ
 
-case class ValueVariable(fullName: String, typ: Typ) {
+case class ValueVariable(fullName: String, typ: ITyp) {
   def identifier: Identifier =
     Identifier(fullName)
   def outputTerm: OutputTerm =
-    TypeConstraint(identifier, Utils.translateTyp(typ))
+    TypeConstraint(identifier, typ.outputTerm)
 }
