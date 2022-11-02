@@ -33,7 +33,6 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
 
   private val cache = new ConcurrentHashMap[List[ITyp], Future[Instantiated]]()
 
-  // TODO: Use a cache of instantiations
   def instantiate(typArgs: List[ITyp]): Future[Instantiated] = {
     lookups.incrementAndGet()
     cache.computeIfAbsent(typArgs, { _ =>

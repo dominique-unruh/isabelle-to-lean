@@ -1,13 +1,12 @@
 package isabelle2lean
 
 import scala.language.implicitConversions
-
 import de.unruh.isabelle.pure.Proofterm.PThm
 
 import java.io.PrintWriter
 import Globals.{ctxt, given}
 import de.unruh.isabelle.pure.{Proofterm, Term, Typ}
-import isabelle2lean.Theorem.Serial
+import isabelle2lean.Theorem.{Serial, lookups}
 import scalaz.{Cord, Show}
 
 import scala.collection.mutable.ListBuffer
@@ -18,9 +17,12 @@ import OutputTerm.showOutputTerm
 import scalaz.Scalaz.longInstance
 import Utils.{zipStrict, given}
 
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+
 //noinspection UnstableApiUsage
 case class Theorem(fullName: String, name: String, serial: Serial, axioms: List[Axiom#Instantiated],
-                   typArgs : List[TypeVariable]) {
+                   typParams : List[TypeVariable]) {
   override def toString: String = s"Theorem(${name}@${serial})"
 
   inline def atIdentifier: Identifier = Identifier(fullName, at = true)
@@ -35,14 +37,22 @@ case class Theorem(fullName: String, name: String, serial: Serial, axioms: List[
     override def hashCode(): Int = ???
   }
 
+  private val cache = new ConcurrentHashMap[List[ITyp], Future[Instantiated]]()
+
+  def instantiate(typs: List[ITyp]): Future[Instantiated] = {
+    lookups.incrementAndGet()
+    cache.computeIfAbsent(typs, { _ =>
+      Theorem.misses.incrementAndGet()
+      val subst = typParams.zipStrict(typs)
+      for (axioms <- Future.sequence (this.axioms.map (_.substitute (subst) ) ) )
+        yield
+          new Instantiated (typs = typs, axioms = axioms)
+    })}
+
   def instantiate(pthm: PThm): Future[Instantiated] = {
     val typs = pthm.header.types.getOrElse(throw RuntimeException(s"No type instantiation provided in theorem $pthm"))
       .map(ITyp.apply)
-    val typargs = this.typArgs
-    val subst = typargs.zipStrict(typs)
-    for (axioms <- Future.sequence( this.axioms.map(_.substitute(subst))) )
-      yield
-        new Instantiated(typs = typs, axioms = axioms)
+    instantiate(typs)
   }
 }
 
@@ -98,7 +108,7 @@ object Theorem {
       }
 
 //      println(s"Done: ${pthm.header.name}")
-      Theorem(fullName = fullName, name = name, serial = pthm.header.serial, axioms = axioms, typArgs = typParams)
+      Theorem(fullName = fullName, name = name, serial = pthm.header.serial, axioms = axioms, typParams = typParams)
     }
   }
 
@@ -148,6 +158,12 @@ object Theorem {
     for (_ <- findAxioms(proof))
       yield axiomsBuffer.result()
   }
+
+  private val lookups = new AtomicInteger
+  private val misses = new AtomicInteger
+
+  def printStats(): Unit =
+    println(s"Instantiated axiom stats: ${misses.get}/${lookups.get}")
 }
 
 

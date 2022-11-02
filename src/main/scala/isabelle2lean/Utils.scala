@@ -1,7 +1,7 @@
 package isabelle2lean
 
 import scala.language.implicitConversions
-import de.unruh.isabelle.pure.{Abs, App, Bound, Const, Free, TFree, TVar, Term, Typ, Type, Var}
+import de.unruh.isabelle.pure.{Abs, App, Bound, Const, Free, Proofterm, TFree, TVar, Term, Thm, Typ, Type, Var}
 import de.unruh.isabelle.pure.Implicits.given
 import de.unruh.isabelle.mlvalue.Implicits.given
 import Globals.{stopWatch, given}
@@ -13,11 +13,13 @@ import java.io.PrintWriter
 import scala.collection.mutable
 import scala.concurrent.{Await, Future}
 import Utils.given
+import de.unruh.isabelle.pure.Proofterm.PThm
 import scalaz.Cord.CordInterpolator.Cords
 import scalaz.Cord.show
 import scalaz.syntax.all.ToShowOps
 import scalaz.Scalaz.cordInterpolator
 
+import scala.annotation.tailrec
 import scala.concurrent.duration.Duration
 
 object Utils {
@@ -210,5 +212,19 @@ object Utils {
     System.out.println("Elapsed: " + stopWatch.formatTime())
     stopWatch.unsplit()
     println()
+  }
+
+
+  //noinspection UnstableApiUsage
+  def getPThm(thm: Thm): PThm = {
+    @tailrec
+    def strip(prf: Proofterm): PThm = prf match {
+      case Proofterm.AppP(proof1, _) => strip(proof1)
+      case Proofterm.Appt(proof, _) => strip(proof)
+      case prf: Proofterm.PThm => prf
+      case prf => throw new AssertionError(s"getPThm: unexpected proofterm $prf")
+    }
+
+    strip(thm.proofOf)
   }
 }

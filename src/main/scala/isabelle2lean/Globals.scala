@@ -27,8 +27,8 @@ object Globals {
     isabelleHome = isabelleHome, logic = "HOL-Proofs", executionContext = Globals.executionContext)
   Utils runAsDaemon {
     while (true) {
-      Utils.printStats()
       Thread.sleep(10000)
+      Utils.printStats()
     }
   }
 

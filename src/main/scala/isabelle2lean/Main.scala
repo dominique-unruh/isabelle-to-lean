@@ -21,6 +21,8 @@ import Utils.given
 import org.apache.commons.lang3.time.StopWatch
 import scalaz.Cord
 
+// TODO: Is shareCommonData useful? `PolyML.shareCommonData PolyML.rootFunction` or `ML_Heap.share_common_data` or similar?
+
 //noinspection UnstableApiUsage
 object Main {
   // Note: We can get all theorems from a thy (incl ancestors) via "Global_Theory.all_thms_of thy false"
@@ -29,18 +31,6 @@ object Main {
         "Nat.add_0_right",
     //      "Binomial.binomial_eq_0",
   )
-
-  def getPThm(thm: Thm): PThm = {
-    @tailrec
-    def strip(prf: Proofterm): PThm = prf match {
-      case Proofterm.AppP(proof1, _) => strip(proof1)
-      case Proofterm.Appt(proof, _) => strip(proof)
-      case prf: Proofterm.PThm => prf
-      case prf => throw new AssertionError(s"getPThm: unexpected proofterm $prf")
-    }
-
-    strip(thm.proofOf)
-  }
 
   def await[A](awaitable: Awaitable[A]): A = Await.result(awaitable, Duration.Inf)
 
@@ -79,7 +69,7 @@ object Main {
 
     val futures = thmNames map { thmName =>
       for (thm <- Thm(ctxt, thmName).forceFuture;
-           pthm = getPThm(thm);
+           pthm = Utils.getPThm(thm);
            theorem <- Theorems.compute(pthm))
       yield
         println(s"### Finished $thmName")
