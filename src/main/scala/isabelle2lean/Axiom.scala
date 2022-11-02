@@ -1,19 +1,22 @@
 package isabelle2lean
 
 import scala.language.implicitConversions
-
 import de.unruh.isabelle.pure.{ConcreteTerm, Term, Typ}
 
 import java.io.PrintWriter
 import Globals.{ctxt, given}
 import de.unruh.isabelle.mlvalue.Implicits.given
 import de.unruh.isabelle.pure.Implicits.given
-import Utils.{mkCord, zipStrict, toCord, given}
+import Utils.{mkCord, toCord, zipStrict, given}
 
 import scala.concurrent.Future
 import OutputTerm.showOutputTerm
+import isabelle2lean.Axiom.{lookups, misses}
 import scalaz.Cord
 import scalaz.syntax.show.cordInterpolator
+
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteTerm,
                                  constants: List[Constant#Instantiated], typParams: List[TypeVariable]) {
@@ -28,13 +31,18 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
     case _ => false
   }
 
+  private val cache = new ConcurrentHashMap[List[ITyp], Future[Instantiated]]()
+
   // TODO: Use a cache of instantiations
   def instantiate(typArgs: List[ITyp]): Future[Instantiated] = {
-    val fullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.AxiomInstantiated)
-    val constants2 = constants.map(_.substitute(typParams.zipStrict(typArgs)))
-    for (constants3 <- Future.sequence(constants2))
-      yield
-        Instantiated(fullName = fullName, typArgs = typArgs, constants = constants3)
+    lookups.incrementAndGet()
+    cache.computeIfAbsent(typArgs, { _ =>
+      misses.incrementAndGet()
+      val fullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.AxiomInstantiated)
+      val constants2 = constants.map(_.substitute(typParams.zipStrict(typArgs)))
+      for (constants3 <- Future.sequence(constants2))
+        yield
+          Instantiated(fullName = fullName, typArgs = typArgs, constants = constants3) })
   }
 
   inline def atIdentifier: Identifier = Identifier(fullName, at = true)
@@ -104,4 +112,10 @@ object Axiom {
       Axiom(fullName = fullName, typParams = typParams, name = name, prop = prop, constants = constants)
     }
   }
+
+  private val lookups = new AtomicInteger
+  private val misses = new AtomicInteger
+
+  def printStats(): Unit =
+    println(s"Instantiated axiom stats: ${misses.get}/${lookups.get}")
 }

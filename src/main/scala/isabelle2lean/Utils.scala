@@ -204,6 +204,7 @@ object Utils {
     println(s"Executor: $active/$size")
     ITyp.printStats()
     Constant.printStats()
+    Axiom.printStats()
     println(s"Theorems/axioms/constants: ${Theorems.count}/${Axioms.count}/${Constants.count}")
     stopWatch.split()
     System.out.println("Elapsed: " + stopWatch.formatTime())

@@ -25,8 +25,8 @@ import scalaz.Cord
 object Main {
   // Note: We can get all theorems from a thy (incl ancestors) via "Global_Theory.all_thms_of thy false"
   private val thmNames = Seq(
-          "HOL.conjI",
-    //    "Nat.add_0_right",
+//          "HOL.conjI",
+        "Nat.add_0_right",
     //      "Binomial.binomial_eq_0",
   )
 

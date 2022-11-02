@@ -128,6 +128,5 @@ object Constant {
   private val misses = new AtomicInteger
 
   def printStats(): Unit =
-    println(s"Constant stats: ${misses.get}/${lookups1.get}+${lookups2.get}")
-
+    println(s"Instantiated constant stats: ${misses.get}/${lookups1.get}+${lookups2.get}")
 }
