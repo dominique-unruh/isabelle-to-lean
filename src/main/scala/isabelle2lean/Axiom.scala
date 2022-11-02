@@ -98,7 +98,8 @@ object Axiom {
           val typParamsString = typParams map { p => Parentheses(p.identifier) } mkCord " "
           output.println(cord"     /- Type params -/   $typParamsString")
         if (constants.nonEmpty)
-          val constsString = constants map { c => Parentheses(c.asParameterTerm) } mkCord " "
+          val constsString = constants.map ( c => Parentheses(c.asParameterTerm) )
+            .mkCord("\n                         ")
           output.println(cord"     /- Constants -/     $constsString")
         output.print("  := ")
         if (valParams.nonEmpty)

@@ -12,15 +12,14 @@ import Globals.{ctxt, given}
 import scalaz.Cord
 import scalaz.syntax.show.cordInterpolator
 import Utils.given_Conversion_String_Cords
-import isabelle2lean.Constant.{lookups1, lookups2, misses}
+import isabelle2lean.Constant.{Definition, lookups1, lookups2, misses}
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-case class Constant(typeFullName: String, defFullName: Option[String], name: String, typ: ITyp, typArgs: List[TypeVariable]) {
+case class Constant(typeFullName: String, name: String, typ: ITyp,
+                    typParams: List[TypeVariable], definitions: List[Definition]) {
   override def toString: String = s"Const($name)"
-
-  def isDefined: Boolean = defFullName.nonEmpty
 
   def typArgsFromTyp(typ: ITyp): List[ITyp] =
     IsabelleOps.constTypargs(Globals.thy, name, typ.typ).retrieveNow
@@ -30,27 +29,31 @@ case class Constant(typeFullName: String, defFullName: Option[String], name: Str
 
   override def hashCode(): Int = ???
 
-  def instantiate(typArgs: List[ITyp]): Future[Instantiated] = {
+/*  def instantiate(typArgs: List[ITyp]): Future[Instantiated] = {
     lookups2.incrementAndGet()
     cache.computeIfAbsent(typArgs, { _ =>
       misses.incrementAndGet()
       Future {
+        if (name == "Groups.plus_class.plus") {
+          println(s"instantiating $this with ${typArgs.map(_.pretty)}")
+        }
         val fullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.ConstantInstantiated)
         Instantiated(fullName = fullName, typ = typ, typArgs = typArgs)
       }})
-  }
+  }*/
 
   inline def atIdentifier: Identifier = Identifier(typeFullName, at = true)
 
-  private val cache = new ConcurrentHashMap[ITyp | List[ITyp], Future[Instantiated]]()
+  private val cache = new ConcurrentHashMap[ITyp, Instantiated]()
 
-  def instantiate(typ: ITyp) : Future[Instantiated] = {
+  def instantiate(typ: ITyp) : Instantiated = {
     lookups1.incrementAndGet()
-    cache.computeIfAbsent(typ, { _ => Future {
+    cache.computeIfAbsent(typ, { _ =>
+      misses.incrementAndGet()
+      val typArgs = typArgsFromTyp(typ) // TODO: Those could be computed inside the Instantiated, possibly lazily
       // We wrap this into Future otherwise the call to `instantiate` raises a "recursive update" exception
-      lookups2.decrementAndGet()
-      instantiate(typArgsFromTyp(typ)) }
-      .flatten
+      val fullName = Naming.mapName(name = name, extra = typ, category = Namespace.ConstantInstantiated)
+      Instantiated(fullName = fullName, typ = typ, typArgs = typArgs)
     })
   }
 
@@ -64,31 +67,70 @@ case class Constant(typeFullName: String, defFullName: Option[String], name: Str
       case _ => false
 
     def substitute(subst: IterableOnce[(TypeVariable, ITyp)]): Future[Instantiated] =
-      for (typArgs2 <- Utils.substituteTypArgs(typArgs, subst);
-           inst <- Constant.this.instantiate(typArgs2))
+      for (typ2 <- Utils.substituteTyp(typ, subst);
+           inst = Constant.this.instantiate(typ2))
         yield inst
 
-    def asParameterTerm: OutputTerm =
+    lazy val definitionMatch: Option[Identifier] = {
+      if (name == "Groups.plus_class.plus") {
+        println(s"const-typ: ${Constant.this.typ.pretty}, my typ: ${typ.pretty}")
+      }
+      val matchingDefinitions =
+        for (definition <- definitions;
+             m <- definition.matches(typ))
+        yield m
+      matchingDefinitions match {
+        case List() => None
+        case List(m) => Some(m)
+        case _ =>
+          throw new AssertionError(s"Colliding definitions for $name: $matchingDefinitions")
+      }
+    }
+
+    def isDefined: Boolean = definitionMatch.nonEmpty
+
+    def asParameterTerm: OutputTerm = {
+      assert(!isDefined)
       TypeConstraint(identifier,
         Application(constant.atIdentifier, typArgs.map(_.outputTerm): _*))
+    }
 
-    def asUsageTerm: OutputTerm = defFullName match
-      case Some(defName) =>
-        Application(Identifier(defName, at = true),
-          typArgs.map(_.outputTerm) :_*)
-      case None => identifier
+    lazy val asUsageTerm: OutputTerm =
+      definitionMatch match
+        case Some(identifier) => identifier
+          //    Application(Identifier(defName, at = true),
+          //      typArgs.map(_.outputTerm): _*)
+        case None => identifier
 
-    inline def identifier: Identifier = Identifier(fullName)
+    inline def identifier: Identifier = {
+      assert(!isDefined)
+      Identifier(fullName)
+    }
   }
 }
 
 object Constant {
-  def createConstant(name: String, output: PrintWriter, definition: Option[Cord] = None,
-                     /** Only used when definition is given via [[definition]]. */
-                     noncomputable: Boolean = false) : Future[Constant] = {
+
+  /** A definition of the constant, possibly at a smaller type */
+  case class Definition(name: String, typ: ITyp, body: Cord) {
+    val fullName: String = Naming.mapName(name = name, extra = typ, category = Namespace.ConstantDef)
+
+    def matches(specificType: ITyp): Option[Identifier] = {
+      // TODO: actually do a pattern match
+      if (name == "Groups.plus_class.plus") {
+        println(s"def typ: ${typ.pretty}, comparison: ${specificType == typ}")
+      }
+      if (specificType == typ)
+        Some(atIdentifier)
+      else
+        None
+    }
+
+    def atIdentifier: Identifier = Identifier(fullName, at = true)
+  }
+
+  def createConstant(name: String, output: PrintWriter, definitions: List[Definition] = Nil) : Future[Constant] = {
     val typeFullName: String = Naming.mapName(name = name, category = Namespace.ConstantType)
-    val defFullName = if (definition.isEmpty) None
-      else Some(Naming.mapName(name = name, category = Namespace.ConstantDef))
 
     for (typ0 <- IsabelleOps.theConstType(Globals.thy, name).retrieve;
          typParams0 <- IsabelleOps.constTypargs(Globals.thy, name, typ0).retrieve)
@@ -110,16 +152,16 @@ object Constant {
         output.println(cord"/-- Type of Isabelle constant $name :: ${typ.pretty} -/")
         output.println(cord"def $typeFullName $typParamString := ${typ.outputTerm}")
         output.println()
-        if (definition.nonEmpty) {
-          output.println(cord"/-- Def of Isabelle constant $name :: ${typ.pretty} -/")
-          output.println(cord"${if (noncomputable) "noncomputable " else Cord.monoid.zero}def ${defFullName.get}$typParamString : $typeFullName $typParamString")
-          output.println(cord"  := ${definition.get}")
+        for (definition <- definitions) {
+          output.println(cord"/-- Def of Isabelle constant $name :: ${typ.pretty}, at type ${definition.typ.pretty} -/")
+          output.println(cord"noncomputable def ${definition.fullName} : ${definition.typ.outputTerm}")
+          output.println(cord"  := ${definition.body}")
           output.println()
         }
         output.flush()
       }
-      Constant(name = name, typ = typ, typArgs = typParams, typeFullName = typeFullName,
-        defFullName = defFullName)
+      Constant(name = name, typ = typ, typParams = typParams, typeFullName = typeFullName,
+        definitions = definitions)
     }
   }
 

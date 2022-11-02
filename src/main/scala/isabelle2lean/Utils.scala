@@ -133,8 +133,8 @@ object Utils {
       }
     case Const(name, typ) =>
       val const: Constant = await(Constants.compute(name))
-      val instantiated: const.Instantiated = Await.result(const.instantiate(ITyp(typ)), Duration.Inf)
-      if (!const.isDefined)
+      val instantiated: const.Instantiated = const.instantiate(ITyp(typ))
+      if (!instantiated.isDefined)
         constants += instantiated
       //      val args = const.instantiate(typ).map(translateTyp_OLD)
       //      Application(Identifier(const.fullName, at = true), args: _*)
@@ -174,6 +174,12 @@ object Utils {
     }
 
     def mkCord(sep: String): Cord = mkCord(Cord(sep))
+  }
+
+  def substituteTyp(typ: ITyp, subst: IterableOnce[(TypeVariable, ITyp)]): Future[ITyp] = {
+    val subst2: List[(Typ, Typ)] = subst.iterator.map { case (t, u) => (t.typ, u.typ) }.toList
+    IsabelleOps.substituteTyp(subst2, typ.typ).retrieve
+      .map(ITyp.apply)
   }
 
   def substituteTypArgs(typArgs: List[ITyp], subst: IterableOnce[(TypeVariable, ITyp)]): Future[List[ITyp]] = {

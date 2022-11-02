@@ -28,7 +28,7 @@ object Globals {
   Utils runAsDaemon {
     while (true) {
       Thread.sleep(10000)
-      Utils.printStats()
+//      Utils.printStats()
     }
   }
 

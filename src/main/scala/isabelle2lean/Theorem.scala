@@ -94,7 +94,7 @@ object Theorem {
           output.println(cord"     /- Type params -/  $typArgString")
         }
         if (constants.nonEmpty)
-          val constsString = Utils.parenList(constants.map(_.asParameterTerm))
+          val constsString = Utils.parenList(constants.map(_.asParameterTerm), sep = "\n                        ")
           output.println(cord"     /- Constants -/    $constsString")
         if (axioms.nonEmpty)
           val axiomsString = Utils.parenList(axioms.map(_.outputTerm), sep = "\n                        ")

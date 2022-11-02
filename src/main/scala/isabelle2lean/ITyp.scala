@@ -12,6 +12,8 @@ import isabelle2lean.Naming.mapName
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
+import Globals.given
+
 final class ITyp private(val uniqueHashCode: Hash, mlValue: MLValue[Typ])(implicit isabelle: Isabelle) {
   override def hashCode: Int = uniqueHashCode.hashCode
   override def equals(that: Any): Boolean = that match
@@ -40,6 +42,8 @@ object ITyp {
     case TVar(name, index, sort) => Identifier(mapName(name = name, extra = index, category = Namespace.TVar))
     case TFree(name, sort) => Identifier(mapName(name, category = Namespace.TFree))
   }
+
+  def parse(string: String) = ITyp(Typ(Globals.ctxt, string))
 
   private val cache = new ConcurrentHashMap[Hash, ITyp]()
   private val lookups = new AtomicInteger
