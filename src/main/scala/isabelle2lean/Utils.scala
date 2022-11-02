@@ -4,7 +4,7 @@ import scala.language.implicitConversions
 import de.unruh.isabelle.pure.{Abs, App, Bound, Const, Free, TFree, TVar, Term, Typ, Type, Var}
 import de.unruh.isabelle.pure.Implicits.given
 import de.unruh.isabelle.mlvalue.Implicits.given
-import Globals.given
+import Globals.{stopWatch, given}
 import isabelle2lean.Main.await
 import isabelle2lean.Naming.mapName
 import scalaz.{Cord, Monoid, Show}
@@ -198,10 +198,16 @@ object Utils {
     inline def toCord = Cord(string)
 
   def printStats(): Unit = {
+    println()
     val active = Globals.executor.getActiveCount
     val size = Globals.executor.getPoolSize
     println(s"Executor: $active/$size")
     ITyp.printStats()
     Constant.printStats()
+    println(s"Theorems/axioms/constants: ${Theorems.count}/${Axioms.count}/${Constants.count}")
+    stopWatch.split()
+    System.out.println("Elapsed: " + stopWatch.formatTime())
+    stopWatch.unsplit()
+    println()
   }
 }

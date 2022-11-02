@@ -7,7 +7,7 @@ import de.unruh.isabelle.pure.*
 import de.unruh.isabelle.pure.Implicits.given
 import de.unruh.isabelle.pure.Proofterm.PThm
 import Naming.mapName
-import Globals.{ctxt, output, given}
+import Globals.{ctxt, output, stopWatch, given}
 import org.apache.commons.io.IOUtils
 
 import java.io.{FileOutputStream, InputStreamReader, PrintWriter}
@@ -23,6 +23,13 @@ import scalaz.Cord
 
 //noinspection UnstableApiUsage
 object Main {
+  // Note: We can get all theorems from a thy (incl ancestors) via "Global_Theory.all_thms_of thy false"
+  private val thmNames = Seq(
+          "HOL.conjI",
+    //    "Nat.add_0_right",
+    //      "Binomial.binomial_eq_0",
+  )
+
   def getPThm(thm: Thm): PThm = {
     @tailrec
     def strip(prf: Proofterm): PThm = prf match {
@@ -43,22 +50,12 @@ object Main {
 
 
   def main(args: Array[String]): Unit = {
-    val stopWatch = StopWatch.createStarted()
-
-    // We can get all theorems from a thy (incl ancestors) via "Global_Theory.all_thms_of thy false"
-    val thmNames = Seq(
-//      "HOL.conjI",
-//      "Binomial.binomial_eq_0",
-      "Nat.add_0_right",
-    )
-
-
     Globals.isabelle.await
 
-    stopWatch.stop()
-    println("Isabelle initialized after: " + stopWatch.formatTime())
-    stopWatch.reset()
-    stopWatch.start()
+    Globals.stopWatch.stop()
+    println("Isabelle initialized after: " + Globals.stopWatch.formatTime())
+    Globals.stopWatch.reset()
+    Globals.stopWatch.start()
 
     output.synchronized {
       output.println(preamble)
@@ -84,20 +81,15 @@ object Main {
       for (thm <- Thm(ctxt, thmName).forceFuture;
            pthm = getPThm(thm);
            theorem <- Theorems.compute(pthm))
-      yield {
+      yield
         println(s"### Finished $thmName")
-        println(s"# theorems:       ${Theorems.count}")
-        println(s"# axioms:         ${Axioms.count}")
-        println(s"# constants:      ${Constants.count}")
-      }}
+    }
 
     for (future <- futures)
       Await.result(future, Duration.Inf)
 
     println(s"Done.")
     Utils.printStats()
-    stopWatch.stop()
-    System.out.println("Total time: " + stopWatch.formatTime())
 
     output.synchronized {
       output.close()
