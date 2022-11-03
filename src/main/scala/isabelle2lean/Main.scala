@@ -88,7 +88,6 @@ object Main {
     for (future <- futures)
       Await.result(future, Duration.Inf)
 
-    println(s"Done.")
     Utils.printStats()
 
     output.synchronized {
@@ -96,6 +95,8 @@ object Main {
     }
 
     Globals.executor.shutdown()
+
+    println("****** Done ******")
   }
 
   def preamble: String =

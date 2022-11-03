@@ -17,4 +17,8 @@ All done on my laptop, with power supply attached
 
 * 9687ed7 – Cache for Theorem.Instantiated
 ** conjI:         12s
-** add_0_right:   ?
+** add_0_right:   11m
+
+* 5705b0b1 – Support for overloaded definitions.
+** conjI:         11s
+** add_0_right:   11m
