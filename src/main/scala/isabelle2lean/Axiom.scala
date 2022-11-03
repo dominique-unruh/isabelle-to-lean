@@ -90,10 +90,9 @@ object Axiom {
       val propString = Utils.translateTermClean(prop, constants = constantsBuffer)
       val constants = constantsBuffer.result()
 
-
       output.synchronized {
         output.println(s"/-- Def of Isabelle axiom $name: ${prop.pretty(ctxt)} -/")
-        output.println(s"def $fullName")
+        output.println(s"noncomputable def $fullName")
         if (typParams.nonEmpty)
           val typParamsString = typParams map { p => Parentheses(p.identifier) } mkCord " "
           output.println(cord"     /- Type params -/   $typParamsString")
@@ -104,11 +103,21 @@ object Axiom {
         output.print("  := ")
         if (valParams.nonEmpty)
           val valParamsString = valParams map { c => Parentheses(c.outputTerm) } mkCord " "
-          output.print(cord"/- Value params -/  forall $valParamsString,\n    ")
+          output.print(cord"/- Value params -/  forall $valParamsString,\n     ")
         output.println(propString)
         output.println()
         output.flush()
       }
+
+/*      if (name == "Pure.equal_elim") {
+        println("******************")
+        println(s"Constants: ${constants.map(_.constant.name)}")
+        println(s"Constants: ${constants.map(_.typ.pretty)}")
+        println(s"Constants: ${constants.map(_.constant.typ.pretty)}")
+        println(s"Defined:   ${constants.map(_.isDefined)}")
+        Console.out.flush()
+      }*/
+
       Axiom(fullName = fullName, typParams = typParams, name = name, prop = prop, constants = constants)
     }
   }

@@ -7,7 +7,7 @@ import de.unruh.isabelle.mlvalue.Implicits.given
 import de.unruh.isabelle.pure.Implicits.given
 
 import java.io.PrintWriter
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import Globals.{ctxt, given}
 import scalaz.Cord
 import scalaz.syntax.show.cordInterpolator
@@ -16,6 +16,7 @@ import isabelle2lean.Constant.{Definition, lookups1, lookups2, misses}
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import scala.concurrent.duration.Duration
 
 case class Constant(typeFullName: String, name: String, typ: ITyp,
                     typParams: List[TypeVariable], definitions: List[Definition]) {
@@ -71,19 +72,17 @@ case class Constant(typeFullName: String, name: String, typ: ITyp,
            inst = Constant.this.instantiate(typ2))
         yield inst
 
-    lazy val definitionMatch: Option[Identifier] = {
-      if (name == "Groups.plus_class.plus") {
-        println(s"const-typ: ${Constant.this.typ.pretty}, my typ: ${typ.pretty}")
-      }
-      val matchingDefinitions =
-        for (definition <- definitions;
-             m <- definition.matches(typ))
-        yield m
-      matchingDefinitions match {
+    lazy val definitionMatch: Option[OutputTerm] = {
+      val matches = definitions.map(_.matches(typ)) // List of futures of optional results
+      val matches2 = Await.result(Future.sequence(matches), Duration.Inf)
+      val matches3 = matches2.flatten // List of results
+      matches3 match {
         case List() => None
-        case List(m) => Some(m)
+        case List(m) =>
+          println(s"DEFINITION MATCH: ${Constant.this.name} @ ${typ.pretty} -> $m")
+          Some(m)
         case _ =>
-          throw new AssertionError(s"Colliding definitions for $name: $matchingDefinitions")
+          throw new AssertionError(s"Colliding definitions for $name: $matches")
       }
     }
 
@@ -112,19 +111,19 @@ case class Constant(typeFullName: String, name: String, typ: ITyp,
 object Constant {
 
   /** A definition of the constant, possibly at a smaller type */
-  case class Definition(name: String, typ: ITyp, body: Cord) {
+  case class Definition(name: String, typ: ITyp, body: Cord, typParams: List[TypeVariable] = Nil) {
     val fullName: String = Naming.mapName(name = name, extra = typ, category = Namespace.ConstantDef)
 
-    def matches(specificType: ITyp): Option[Identifier] = {
-      // TODO: actually do a pattern match
-      if (name == "Groups.plus_class.plus") {
-        println(s"def typ: ${typ.pretty}, comparison: ${specificType == typ}")
-      }
-      if (specificType == typ)
-        Some(atIdentifier)
-      else
-        None
-    }
+    def matches(specificType: ITyp): Future[Option[OutputTerm]] =
+      for (m <- IsabelleOps.typMatch(Globals.thy, typ.typ, specificType.typ).retrieve)
+        yield
+          m match
+            case None => None
+            case Some(matchTyps) =>
+              val matchTypMap = Map.from( matchTyps.map { case (name,index,typ) => TypeVariable.tvar(name,index) -> ITyp(typ) } )
+              val typArgs = typParams.map(matchTypMap)
+//              println(s"const: $name, deftyp: ${typ.pretty}, specific: ${specificType.pretty}, args: ${typArgs}, map: ${matchTypMap}")
+              Some(Application(atIdentifier, typArgs.map(_.outputTerm) :_*))
 
     def atIdentifier: Identifier = Identifier(fullName, at = true)
   }
@@ -138,23 +137,20 @@ object Constant {
       val typ = ITyp(typ0)
       val typParams = typParams0 map {
         case typ @ TVar(name, index, sort) =>
-          //      assert(sort.isEmpty, sort)
-          val name2 = Naming.mapName(name = name, extra = index, category = Namespace.TVar)
-          TypeVariable(name2, typ = typ)
+          assert(sort.isEmpty || sort == List("HOL.type"), sort)
+          TypeVariable.tvar(name, index)
         case typ => throw new AssertionError(s"createConstant: $typ")
       }
-      val typParamString = if (typParams.isEmpty)
-        Cord.monoid.zero
-      else
-        Cord(" ") ++ Utils.parenList(typParams.map(_.outputTerm))
+      val typParamString = Utils.parenList(typParams.map(_.outputTerm), prefix=" ")
 
       output.synchronized {
         output.println(cord"/-- Type of Isabelle constant $name :: ${typ.pretty} -/")
-        output.println(cord"def $typeFullName $typParamString := ${typ.outputTerm}")
+        output.println(cord"def $typeFullName$typParamString := ${typ.outputTerm}")
         output.println()
         for (definition <- definitions) {
+          val defTypParamString = Utils.parenList(definition.typParams.map(_.outputTerm), prefix=" ")
           output.println(cord"/-- Def of Isabelle constant $name :: ${typ.pretty}, at type ${definition.typ.pretty} -/")
-          output.println(cord"noncomputable def ${definition.fullName} : ${definition.typ.outputTerm}")
+          output.println(cord"noncomputable def ${definition.fullName}${defTypParamString} : ${definition.typ.outputTerm}")
           output.println(cord"  := ${definition.body}")
           output.println()
         }

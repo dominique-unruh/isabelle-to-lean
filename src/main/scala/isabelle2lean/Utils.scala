@@ -64,12 +64,10 @@ object Utils {
       assert(tfrees.isEmpty)
 
       /*val targs =*/ tvars.reverse map { case ((name, index), sort) =>
-        // TODO: don't ignore sort!
-        val name2 = mapName(name = name, extra = index, category = Namespace.TVar)
-        TypeVariable(fullName = name2, typ = TVar(name, index, sort))
-        //        s"{$name2: Type} [Nonempty $name2]" // TODO: In axiom declarations, we can skip the [Nonempty ...]
+        // TODO: don't ignore sort!?
+        assert(sort.isEmpty)
+        TypeVariable.tvar(name, index)
       }
-
       //      targs.mkString(" ")
     }
 
@@ -189,15 +187,17 @@ object Utils {
       .map(_.map(ITyp.apply))
   }
 
-  def parenList(terms: IterableOnce[OutputTerm], parens: String = "()", sep: String = " "): Cord = {
-    if (parens == "()")
-      terms.iterator.map(Parentheses(_).toCord).mkCord(sep)
+  def parenList(terms: Iterable[OutputTerm], parens: String = "()", sep: String = " ", prefix: String = " "): Cord =
+    if (terms.isEmpty) Cord.monoid.zero
     else {
-      val open = Cord(parens.substring(0,1))
-      val close = Cord(parens.substring(1,2))
-      terms.iterator.map(t => cord"$open$t$close").mkCord(sep)
+      if (parens == "()")
+        Cord(prefix) ++ terms.iterator.map(Parentheses(_).toCord).mkCord(sep)
+      else {
+        val open = Cord(parens.substring(0,1))
+        val close = Cord(parens.substring(1,2))
+        Cord(prefix) ++ terms.iterator.map(t => cord"$open$t$close").mkCord(sep)
+      }
     }
-  }
 
   given Conversion[String, Cords] with
     inline def apply(string: String): Cords = Cords.trivial(Cord(string))
