@@ -17,4 +17,8 @@ object IsabelleOps {
   val constTypargs = compileFunction[Theory, String, Typ, List[Typ]]("fn (thy,name,typ) => Sign.const_typargs thy (name,typ)")
   val substituteTyp = compileFunction[List[(Typ,Typ)], Typ, Typ]("fn (subst, typ) => typ_subst_atomic subst typ")
   val uniqueHashCodeTyp = compileFunction[Typ, (Long, Long)](s"let\n${Hash.hashLib}\nin hashAsIntPair hashTyp end")
+  val typMatch = compileFunction[Theory, Typ, Typ, Option[List[(String, Int, Typ)]]](
+    "fn (thy,general,specific) => Sign.typ_match thy (general,specific) Vartab.empty " +
+      "|> Vartab.dest |> map (fn ((name,index),(sort,typ)) => (name,index,typ)) |> SOME " +
+      "handle Type.TYPE_MATCH => NONE")
 }

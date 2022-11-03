@@ -44,6 +44,13 @@ object Main {
       name = name, output = output, definitions = definitions)))
   }
 
+  def defineConstant(name: String, typ: String, tparams: List[String], body: String): Unit = {
+    await(Constants.add(name, Constant.createConstant(
+      name = name, output = output, definitions = List(
+        Constant.Definition(name = name, typ = ITyp.parse(typ), body = Cord(body),
+          typParams = tparams.map { name => TypeVariable.tvar(name, 0) }
+        )))))
+  }
 
   def main(args: Array[String]): Unit = {
     Globals.isabelle.await
@@ -60,10 +67,10 @@ object Main {
 
     defineConstant("Pure.imp", "prop => prop => prop", "fun p q => p -> q")
     defineConstant("Pure.prop", "prop => prop", "fun p => p")
-//    defineConstant("Pure.eq", "???", "fun p q => p = q")
-//    defineConstant("HOL.eq", "???", "fun p q => (Classical.propDecidable (p = q)).decide", noncomputable = true)
-//    defineConstant("Pure.all", "???", "fun f => ∀x, f x")
-//    defineConstant("HOL.All", "???", "fun f => (Classical.propDecidable (∀x, f x = true)).decide", noncomputable = true)
+    defineConstant("Pure.eq", "?'a::{} => ?'a => prop", List("'a"), "fun p q => p = q")
+    defineConstant("HOL.eq", "?'a::{} => ?'a => bool", List("'a"), "fun p q => (Classical.propDecidable (p = q)).decide")
+    defineConstant("Pure.all", "(?'a::{} => prop) => prop", List("'a"), "fun f => ∀x, f x")
+    defineConstant("HOL.All", "(?'a::{} => bool) => bool", List("'a"), "fun f => (Classical.propDecidable (∀x, f x = true)).decide")
     defineConstant("HOL.Trueprop", "bool => prop", "fun b => b = true")
     defineConstant("HOL.conj", "bool => bool => bool", "and")
     defineConstant("HOL.disj", "bool => bool => bool", "or")
@@ -74,7 +81,7 @@ object Main {
     defineConstant("Nat.Suc", "nat => nat", "Nat.succ")
     defineConstant("Groups.plus_class.plus", List(
       "nat => nat => nat" -> "Nat.add",
-      "int => int => int" -> "Nat.add",
+      "int => int => int" -> "Int.add",
     ))
 
     val futures = thmNames map { thmName =>

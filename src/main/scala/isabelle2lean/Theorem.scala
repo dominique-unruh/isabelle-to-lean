@@ -83,7 +83,7 @@ object Theorem {
          axioms <- allAxiomsInProof(proof))
     yield {
       for (axiom <- axioms)
-        constantsBuffer.addAll(axiom.constants)
+        constantsBuffer.addAll(axiom.constants.filterNot(_.isDefined))
       val constants = constantsBuffer.result()
 
       output.synchronized {
@@ -94,10 +94,10 @@ object Theorem {
           output.println(cord"     /- Type params -/  $typArgString")
         }
         if (constants.nonEmpty)
-          val constsString = Utils.parenList(constants.map(_.asParameterTerm), sep = "\n                        ")
+          val constsString = Utils.parenList(constants.map(_.asParameterTerm), sep = "\n                         ")
           output.println(cord"     /- Constants -/    $constsString")
         if (axioms.nonEmpty)
-          val axiomsString = Utils.parenList(axioms.map(_.outputTerm), sep = "\n                        ")
+          val axiomsString = Utils.parenList(axioms.map(_.outputTerm), sep = "\n                         ")
           output.println(cord"     /- Axioms -/       $axiomsString")
         if (valParams.nonEmpty)
           val valParamString : Cord = Utils.parenList(valParams.map(_.outputTerm))

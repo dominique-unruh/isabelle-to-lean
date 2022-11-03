@@ -35,7 +35,7 @@ object Globals {
 
   implicit val isabelle: Isabelle = new Isabelle(setup)
   implicit val thy: Theory = Theory("Main")
-  implicit val ctxt: Context = Context(thy)
+  implicit val ctxt: Context = Context(thy).setMode(Context.Mode.schematic)
   /** Synchronize printing via [[output]]. */
   val output = new PrintWriter(new FileOutputStream("test.lean"))
 
