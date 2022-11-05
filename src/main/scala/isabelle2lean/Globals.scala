@@ -36,9 +36,9 @@ object Globals {
   implicit val isabelle: Isabelle = new Isabelle(setup)
   implicit val thy: Theory = Theory("Main")
   implicit val ctxt: Context = Context(thy).setMode(Context.Mode.schematic)
-  /** Synchronize printing via [[output]]. */
-  val output = new PrintWriter(new FileOutputStream("test.lean"))
   val outputDir = Path.of("target/lean")
+  /** Synchronize printing via [[output]]. */
+  val output = new PrintWriter(new FileOutputStream(outputDir.resolve("test.lean").toFile))
 
   val tryToParallelize = true
 }

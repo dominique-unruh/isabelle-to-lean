@@ -12,15 +12,18 @@ import Globals.{ctxt, given}
 import scalaz.Cord
 import scalaz.syntax.show.cordInterpolator
 import Utils.given_Conversion_String_Cords
-import isabelle2lean.Constant.{Definition, lookups1, lookups2, misses}
+import isabelle2lean.Constant.{lookups1, lookups2, misses}
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration.Duration
 
 case class Constant(typeFullName: String, name: String, typ: ITyp,
-                    typParams: List[TypeVariable], definitions: List[Definition]) {
+                    typParams: List[TypeVariable], theoryName: String) {
   override def toString: String = s"Const($name)"
+
+  private var definitions: List[Definition] = Nil
 
   def typArgsFromTyp(typ: ITyp): List[ITyp] =
     IsabelleOps.constTypargs(Globals.thy, name, typ.typ).retrieveNow
@@ -93,11 +96,9 @@ case class Constant(typeFullName: String, name: String, typ: ITyp,
       Identifier(fullName)
     }
   }
-}
 
-object Constant {
   /** A definition of the constant, possibly at a smaller type */
-  case class Definition(name: String, typ: ITyp, body: Cord, typParams: List[TypeVariable] = Nil) {
+  case class Definition(typ: ITyp, body: Cord, typParams: List[TypeVariable]) {
     val fullName: String = Naming.mapName(name = name, extra = typ, category = Namespace.ConstantDef)
 
     def matches(specificType: ITyp): Future[Option[OutputTerm]] =
@@ -106,17 +107,33 @@ object Constant {
           m match
             case None => None
             case Some(matchTyps) =>
-              val matchTypMap = Map.from( matchTyps.map { case (name,index,typ) => TypeVariable.tvar(name,index) -> ITyp(typ) } )
+              val matchTypMap = Map.from(matchTyps.map { case (name, index, typ) => TypeVariable.tvar(name, index) -> ITyp(typ) })
               val typArgs = typParams.map(matchTypMap)
-//              println(s"const: $name, deftyp: ${typ.pretty}, specific: ${specificType.pretty}, args: ${typArgs}, map: ${matchTypMap}")
-              Some(Application(atIdentifier, typArgs.map(_.outputTerm) :_*))
+              //              println(s"const: $name, deftyp: ${typ.pretty}, specific: ${specificType.pretty}, args: ${typArgs}, map: ${matchTypMap}")
+              Some(Application(atIdentifier, typArgs.map(_.outputTerm): _*))
 
     def atIdentifier: Identifier = Identifier(fullName, at = true)
   }
 
-  def createConstant(name: String, output: PrintWriter, definitions: List[Definition] = Nil) : Future[Constant] = {
+  def createDefinition(typ: ITyp, body: Cord, typParams: List[TypeVariable], theory: ITheory): Definition = {
+    val defTypParamString = Utils.parenList(typParams.map(_.outputTerm), prefix = " ")
+    val definition = Definition(typ, body, typParams)
+    theory.println(
+      cord"""/-- Def of Isabelle constant $name :: ${typ.pretty}, at type ${typ.pretty} -/
+noncomputable def ${definition.fullName}${defTypParamString} : ${typ.outputTerm}
+:= ${definition.body}
+""")
+    synchronized { definitions = definition :: definitions }
+    definition
+  }
+}
+
+object Constant {
+
+  def createConstant(theory: String, name: String, output: PrintWriter) : Future[Constant] = {
     val typeFullName: String = Naming.mapName(name = name, category = Namespace.ConstantType)
 
+    // TODO: When called from ITheory, we already have the typ. Don't query again?
     for (typ0 <- IsabelleOps.theConstType(Globals.thy, name).retrieve;
          typParams0 <- IsabelleOps.constTypargs(Globals.thy, name, typ0).retrieve)
     yield {
@@ -133,17 +150,9 @@ object Constant {
         output.println(cord"/-- Type of Isabelle constant $name :: ${typ.pretty} -/")
         output.println(cord"def $typeFullName$typParamString := ${typ.outputTerm}")
         output.println()
-        for (definition <- definitions) {
-          val defTypParamString = Utils.parenList(definition.typParams.map(_.outputTerm), prefix=" ")
-          output.println(cord"/-- Def of Isabelle constant $name :: ${typ.pretty}, at type ${definition.typ.pretty} -/")
-          output.println(cord"noncomputable def ${definition.fullName}${defTypParamString} : ${definition.typ.outputTerm}")
-          output.println(cord"  := ${definition.body}")
-          output.println()
-        }
         output.flush()
       }
-      Constant(name = name, typ = typ, typParams = typParams, typeFullName = typeFullName,
-        definitions = definitions)
+      Constant(name = name, typ = typ, typParams = typParams, typeFullName = typeFullName, theoryName = theory)
     }
   }
 

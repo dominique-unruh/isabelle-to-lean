@@ -8,9 +8,9 @@ import de.unruh.isabelle.pure.Implicits.given
 import de.unruh.isabelle.pure.Proofterm.PThm
 import Naming.mapName
 import Globals.{ctxt, output, stopWatch, given}
-import org.apache.commons.io.IOUtils
+import org.apache.commons.io.{FileUtils, IOUtils}
 
-import java.io.{FileOutputStream, InputStreamReader, PrintWriter}
+import java.io.{File, FileOutputStream, InputStreamReader, PrintWriter}
 import java.nio.file.{Files, Path, Paths}
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -39,17 +39,20 @@ object Main {
   }
 
   def defineConstant(name: String, defs: List[(String,String)]): Unit = {
-    val definitions = defs map { case (typ,body) => Constant.Definition(name, ITyp.parse(typ), Cord(body)) }
-    await(Constants.add(name, Constant.createConstant(
-      name = name, output = output, definitions = definitions)))
+    val constant = Constants.get(name)
+    val theory = await(Theories.compute(constant.theoryName))
+    for ((typ,body) <- defs) {
+      constant.createDefinition(ITyp.parse(typ), Cord(body), Nil, theory)
+    }
   }
 
   def defineConstant(name: String, typ: String, tparams: List[String], body: String): Unit = {
-    await(Constants.add(name, Constant.createConstant(
-      name = name, output = output, definitions = List(
-        Constant.Definition(name = name, typ = ITyp.parse(typ), body = Cord(body),
-          typParams = tparams.map { name => TypeVariable.tvar(name, 0) }
-        )))))
+    val constant = Constants.get(name)
+    val theory = await(Theories.compute(constant.theoryName))
+    constant.createDefinition(typ = ITyp.parse(typ), body = Cord(body),
+      typParams = tparams.map { name => TypeVariable.tvar(name, 0) },
+      theory = theory
+    )
   }
 
   def proveAxiom(name: String, prop: String, tparams: List[String], body: String): Unit = {
@@ -71,9 +74,19 @@ object Main {
     Globals.stopWatch.start()
 
     output.synchronized {
-      output.println(preamble)
+      output.println("""import IsabelleHOL.HOL.Nat
+                       |set_option linter.unusedVariables false
+                       |set_option autoImplicit false
+                       |""".stripMargin)
       output.println()
     }
+
+    FileUtils.copyDirectory(new File("src/main/lean"), new File("target/lean"))
+//    Files.writeString(Globals.outputDir.resolve("IsabelleHOLPreamble.lean"), preamble)
+
+//    val pureThy = await(Theories.compute("Pure"))
+//    val holThy = await(Theories.compute("HOL.HOL"))
+    val natThy = await(Theories.compute("HOL.Nat"))
 
     defineConstant("Pure.imp", "prop => prop => prop", "fun p q => p -> q")
     defineConstant("Pure.prop", "prop => prop", "fun p => p")
@@ -124,6 +137,6 @@ object Main {
   }
 
   def preamble: String =
-//    IOUtils.toString(getClass.getResource("/preamble.lean"), "utf-8")
-    Files.readString(Paths.get("src/main/lean/preamble.lean"))
+//    IOUtils.toString(getClass.getResource("/IsabelleHOLPreamble.lean"), "utf-8")
+    Files.readString(Paths.get("src/main/lean/IsabelleHOL/IsabelleHOLPreamble.lean"))
 }

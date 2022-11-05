@@ -28,4 +28,18 @@ object IsabelleOps {
     "fn (thy, general_specific) => fold (Sign.typ_match thy) general_specific Vartab.empty " +
       "|> Vartab.dest |> map (fn ((name,index),(sort,typ)) => (name,index,typ)) |> SOME " +
       "handle Type.TYPE_MATCH => NONE")
+  val getConstantsOf = compileFunction[Theory, List[(String, Typ)]](
+    """fn thy => let
+      |  val thy_name = Context.theory_name thy
+      |  val {const_space, constants, ...} = Sign.consts_of thy |> Consts.dest
+      |  in constants
+      |      |> map_filter (fn (_, (_, SOME _)) => NONE
+      |                      | (name, (typ, NONE)) =>
+      |                         if thy_name =  Name_Space.the_entry_theory_name const_space name
+      |                         then SOME (name, typ) else NONE)
+      |  end
+      |""".stripMargin)
+  val theoryLongName = compileFunction[Theory, String]("Context.theory_long_name")
+  val parentsOf = compileFunction[Theory, List[String]]("fn thy => Context.parents_of thy |> map Context.theory_long_name")
+  val theoryOfConstant = compileFunction[Theory, String, String]("fn (thy, const) => Name_Space.the_entry_theory_name (Sign.consts_of thy |> Consts.space_of) const")
 }

@@ -130,7 +130,7 @@ object Utils {
           Identifier(mapName(name, category = Namespace.Free))
       }
     case Const(name, typ) =>
-      val const: Constant = await(Constants.compute(name))
+      val const: Constant = (Constants.get(name))
       val instantiated: const.Instantiated = const.instantiate(ITyp(typ))
       if (!instantiated.isDefined)
         constants += instantiated

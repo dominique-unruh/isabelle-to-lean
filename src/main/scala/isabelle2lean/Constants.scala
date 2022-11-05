@@ -9,14 +9,15 @@ import Globals.given
 object Constants {
   def count: Int = nameMap.size
 
-  private val nameMap = new ConcurrentHashMap[String, Future[Constant]]()
+  private val nameMap = new ConcurrentHashMap[String, Constant]()
 
-  def add(name: String, constant: Future[Constant]): Future[Unit] =
-    if (nameMap.putIfAbsent(name, constant) != null)
+  /** Call only from ITheory.createTheory */
+  def add(constant: Constant): Unit =
+    if (nameMap.putIfAbsent(constant.name, constant) != null)
       throw new RuntimeException("Double add")
-    for (constantNow <- constant)
-      yield assert(name == constantNow.name)
 
-  def compute(name: String): Future[Constant] =
-    nameMap.computeIfAbsent(name, _ => Constant.createConstant(name, Globals.output))
+//  def compute(name: String): Future[Constant] =
+//    nameMap.computeIfAbsent(name, _ => Constant.createConstant(name, Globals.output))
+
+  def get(name: String): Constant = nameMap.get(name)
 }

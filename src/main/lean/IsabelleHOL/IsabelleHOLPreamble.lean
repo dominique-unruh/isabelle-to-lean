@@ -35,3 +35,6 @@ instance: Nonempty Int_int := Nonempty.intro (0 : Int)
 instance (a b: Type) [sa: Nonempty a]: Nonempty (Sum_Type_sum a b) :=
   match sa with | Nonempty.intro xa => Nonempty.intro (Sum_Type_sum.inl xa)
 instance: Nonempty Num_num_num_IITN_num := proof_omitted
+
+
+axiom Pure_proof : Type
