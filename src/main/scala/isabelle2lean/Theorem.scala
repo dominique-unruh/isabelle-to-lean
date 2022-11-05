@@ -97,7 +97,7 @@ object Theorem {
           val constsString = Utils.parenList(constants.map(_.asParameterTerm), sep = "\n                         ")
           output.println(cord"     /- Constants -/    $constsString")
         if (axioms.nonEmpty)
-          val axiomsString = Utils.parenList(axioms.map(_.outputTerm), sep = "\n                         ")
+          val axiomsString = Utils.parenList(axioms.map(_.asParameterTerm), sep = "\n                         ")
           output.println(cord"     /- Axioms -/       $axiomsString")
         if (valParams.nonEmpty)
           val valParamString : Cord = Utils.parenList(valParams.map(_.outputTerm))
@@ -148,7 +148,8 @@ object Theorem {
              _ = assert(typs.nonEmpty);
              instantiated <- axiom.instantiate(typs.get.map(ITyp.apply)))
           yield
-            axiomsBuffer.addOne(instantiated)
+            if (!instantiated.isProven)
+              axiomsBuffer.addOne(instantiated)
       case Proofterm.PBound(index) => Future.unit
       case Proofterm.OfClass(typ, clazz) => ???
       case Proofterm.Oracle(name, term, typ) => ???
@@ -156,7 +157,7 @@ object Theorem {
         for (thm <- Theorems.compute(pthm);
              inst <- thm.instantiate(pthm))
           yield
-            axiomsBuffer.addAll(inst.axioms)
+            axiomsBuffer.addAll(inst.axioms.filterNot(_.isProven))
     for (_ <- findAxioms(proof))
       yield axiomsBuffer.result()
   }

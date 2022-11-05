@@ -2,6 +2,10 @@
 
 All done on my laptop, with power supply attached
 
+* bc234852 – Supporting explicitly defined constants.
+** conjI:         17s
+** add_0_right:   2h42m
+
 * a2d28fd – Using ITyp
 ** conjI:         17s
 ** add_0_right:   17m
@@ -22,3 +26,8 @@ All done on my laptop, with power supply attached
 * 5705b0b1 – Support for overloaded definitions.
 ** conjI:         11s
 ** add_0_right:   11m
+
+* 3ea03fb3 – also parametric ones
+** conjI:         12s
+** add_0_right:   10m41s
+

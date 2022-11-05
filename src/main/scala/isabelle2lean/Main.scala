@@ -27,14 +27,14 @@ import scalaz.Cord
 object Main {
   // Note: We can get all theorems from a thy (incl ancestors) via "Global_Theory.all_thms_of thy false"
   private val thmNames = Seq(
-//          "HOL.conjI",
-        "Nat.add_0_right",
+          "HOL.conjI",
+//        "Nat.add_0_right",
 //          "Binomial.binomial_eq_0",
   )
 
   def await[A](awaitable: Awaitable[A]): A = Await.result(awaitable, Duration.Inf)
 
-  def defineConstant(name: String, typ: String, body: String, noncomputable: Boolean = false): Unit = {
+  def defineConstant(name: String, typ: String, body: String): Unit = {
     defineConstant(name, List((typ, body)))
   }
 
@@ -50,6 +50,16 @@ object Main {
         Constant.Definition(name = name, typ = ITyp.parse(typ), body = Cord(body),
           typParams = tparams.map { name => TypeVariable.tvar(name, 0) }
         )))))
+  }
+
+  def proveAxiom(name: String, prop: String, tparams: List[String], body: String): Unit = {
+    await(Axioms.add(name, Axiom.createAxiom(name, prop = Term(ctxt, prop, Type("prop")).concreteRecursive, output = output,
+      proofs = List(
+        Axiom.Proof(name = name,
+          typArgs = tparams.map { name => ITyp(TypeVariable.tvar(name, 0).typ) },
+          typParams = tparams.map { name => TypeVariable.tvar(name, 0) },
+          body = Cord(body))
+      ))))
   }
 
   def main(args: Array[String]): Unit = {
@@ -83,6 +93,13 @@ object Main {
       "nat => nat => nat" -> "Nat.add",
       "int => int => int" -> "Int.add",
     ))
+
+    // TODO: get the prop argument from the theory
+    proveAxiom("Pure.equal_elim", "⟦PROP ?A ≡ PROP ?B; PROP ?A⟧ ⟹ PROP ?B", Nil, "cast")
+    proveAxiom("Pure.symmetric", "?x::?'a::{} ≡ ?y ⟹ ?y ≡ ?x", List("'a"), "Eq.symm")
+    proveAxiom("Pure.reflexive", "?x::?'a::{} ≡ ?x", List("'a"), "Eq.refl x0")
+    proveAxiom("Pure.combination", "⟦?f::?'a::{} => ?'b::{} ≡ ?g; ?x ≡ ?y⟧ ⟹ ?f ?x ≡ ?g ?y", List("'a", "'b"), "congr")
+    proveAxiom("Pure.transitive", "⟦?x::?'a::{} ≡ ?y; ?y ≡ ?z⟧ ⟹ ?x ≡ ?z", List("'a"), "Eq.trans")
 
     val futures = thmNames map { thmName =>
       for (thm <- Thm(ctxt, thmName).forceFuture;

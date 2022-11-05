@@ -11,8 +11,8 @@ import isabelle2lean.Naming.mapName
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
-
 import Globals.given
+import scalaz.{Cord, Show}
 
 final class ITyp private(val uniqueHashCode: Hash, mlValue: MLValue[Typ])(implicit isabelle: Isabelle) {
   override def hashCode: Int = uniqueHashCode.hashCode
@@ -22,9 +22,13 @@ final class ITyp private(val uniqueHashCode: Hash, mlValue: MLValue[Typ])(implic
   lazy val outputTerm: OutputTerm = ITyp.translateTyp(typ)
   lazy val pretty: String = MLValueTyp(mlValue).pretty(Globals.ctxt)
   inline def typ: MLValueTyp = MLValueTyp(mlValue)
+  override def toString: String = pretty
 }
 
 object ITyp {
+  given Show[ITyp] with
+    override def show(typ: ITyp): Cord = Cord(typ.pretty)
+
   def apply(typ: MLValue[Typ])(implicit isabelle: Isabelle): ITyp = {
     val hash = Hash(IsabelleOps.uniqueHashCodeTyp(typ).retrieveNow)
     lookups.incrementAndGet()
@@ -43,7 +47,7 @@ object ITyp {
     case TFree(name, sort) => Identifier(mapName(name, category = Namespace.TFree))
   }
 
-  def parse(string: String) = ITyp(Typ(Globals.ctxt, string))
+  def parse(string: String): ITyp = ITyp(Typ(Globals.ctxt, string))
 
   private val cache = new ConcurrentHashMap[Hash, ITyp]()
   private val lookups = new AtomicInteger

@@ -29,20 +29,7 @@ case class Constant(typeFullName: String, name: String, typ: ITyp,
   override def equals(obj: Any): Boolean = ???
 
   override def hashCode(): Int = ???
-
-/*  def instantiate(typArgs: List[ITyp]): Future[Instantiated] = {
-    lookups2.incrementAndGet()
-    cache.computeIfAbsent(typArgs, { _ =>
-      misses.incrementAndGet()
-      Future {
-        if (name == "Groups.plus_class.plus") {
-          println(s"instantiating $this with ${typArgs.map(_.pretty)}")
-        }
-        val fullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.ConstantInstantiated)
-        Instantiated(fullName = fullName, typ = typ, typArgs = typArgs)
-      }})
-  }*/
-
+  
   inline def atIdentifier: Identifier = Identifier(typeFullName, at = true)
 
   private val cache = new ConcurrentHashMap[ITyp, Instantiated]()
@@ -109,7 +96,6 @@ case class Constant(typeFullName: String, name: String, typ: ITyp,
 }
 
 object Constant {
-
   /** A definition of the constant, possibly at a smaller type */
   case class Definition(name: String, typ: ITyp, body: Cord, typParams: List[TypeVariable] = Nil) {
     val fullName: String = Naming.mapName(name = name, extra = typ, category = Namespace.ConstantDef)

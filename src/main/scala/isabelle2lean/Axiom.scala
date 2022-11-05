@@ -7,9 +7,9 @@ import java.io.PrintWriter
 import Globals.{ctxt, given}
 import de.unruh.isabelle.mlvalue.Implicits.given
 import de.unruh.isabelle.pure.Implicits.given
-import Utils.{mkCord, toCord, zipStrict, given}
+import Utils.{mkCord, toCord, valParametersOfProp, zipStrict, given}
 
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import OutputTerm.showOutputTerm
 import isabelle2lean.Axiom.{lookups, misses}
 import scalaz.Cord
@@ -17,9 +17,13 @@ import scalaz.syntax.show.cordInterpolator
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import scala.concurrent.duration.Duration
 
-case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteTerm,
-                                 constants: List[Constant#Instantiated], typParams: List[TypeVariable]) {
+case class Axiom private[Axiom] (fullName: String, name: String,
+                                 // TODO: This is actually not really needed. Remove for efficiency (or just MLValue-ref)
+                                 prop: ConcreteTerm,
+                                 constants: List[Constant#Instantiated], typParams: List[TypeVariable],
+                                 proofs: List[Axiom.Proof]) {
   override def toString: String = s"Axiom($name)"
 
   def shortSummary: Cord = cord"$name: ${prop.pretty(ctxt)}"
@@ -58,31 +62,75 @@ case class Axiom private[Axiom] (fullName: String, name: String, prop: ConcreteT
     }
 
     /** Returns "instantiated-fullName : axiom-fullName typArgs" */
-    def outputTerm: OutputTerm =
+    def asParameterTerm: OutputTerm = {
+      assert(!isProven)
       Comment(shortSummary.shows,
         TypeConstraint(identifier,
           Application(
-            Application(axiom.atIdentifier, typArgs.map(_.outputTerm) :_*),
-            constants.map(_.asUsageTerm) :_*)))
+            Application(axiom.atIdentifier, typArgs.map(_.outputTerm): _*),
+            constants.map(_.asUsageTerm): _*)))
+    }
 
-    inline def identifier: Identifier = Identifier(fullName)
+    inline def identifier: Identifier = {
+      assert(!isProven)
+      Identifier(fullName)
+    }
 
     def substitute(subst: IterableOnce[(TypeVariable, ITyp)]): Future[Instantiated] =
       for (typArgs2 <- Utils.substituteTypArgs(typArgs, subst);
            inst <- Axiom.this.instantiate(typArgs2))
-        yield inst
+      yield inst
 
     override def hashCode(): Int = fullName.hashCode
 
     override def equals(obj: Any): Boolean = obj match
       case inst: Instantiated => fullName == inst.fullName
       case _ => false
+
+    lazy val proofMatch: Option[OutputTerm] = {
+      val matches = proofs.map(_.matches(typArgs)) // List of futures of optional results
+      val matches2 = Await.result(Future.sequence(matches), Duration.Inf)
+      val matches3 = matches2.flatten // List of results
+      matches3 match {
+        case List() => None
+        case List(m) =>
+          println(s"AXIOM MATCH: ${Axiom.this.name} @ ${typArgs.map(_.pretty.toCord).mkCord(" ")} -> $m")
+          Some(m)
+        case _ =>
+          throw new AssertionError(s"Colliding definitions for $name: $matches")
+      }
+    }
+
+    def isProven: Boolean = proofMatch.nonEmpty
   }
 }
 
 object Axiom {
-  def createAxiom(name: String, prop: ConcreteTerm, output: PrintWriter): Future[Axiom] = {
-    val fullName: String = Naming.mapName(prefix = "axiom_", name = name, category = Namespace.Axiom)
+  /** A proof of the axiom, possibly at a smaller type */
+  case class Proof(name: String,
+                   /** Type arguments with which the Axiom type is instantiated */
+                   typArgs: List[ITyp],
+                   body: Cord,
+                   /** Type parameters this axiom's proof has */
+                   typParams: List[TypeVariable] = Nil) {
+    val fullName: String = Naming.mapName(name = name, extra = typArgs, category = Namespace.AxiomProof)
+
+    def matches(specificTypArgs: List[ITyp]): Future[Option[OutputTerm]] =
+      for (m <- IsabelleOps.typListMatch(Globals.thy, typArgs.map(_.typ).zipStrict(specificTypArgs.map(_.typ))).retrieve)
+        yield
+          m match
+            case None => None
+            case Some(matchTyps) =>
+              val matchTypMap = Map.from( matchTyps.map { case (name,index,typ) => TypeVariable.tvar(name,index) -> ITyp(typ) } )
+              val typArgs = typParams.map(matchTypMap)
+              Some(Application(atIdentifier, typArgs.map(_.outputTerm) :_*))
+
+    def atIdentifier: Identifier = Identifier(fullName, at = true)
+  }
+
+  def createAxiom(name: String, prop: ConcreteTerm, output: PrintWriter,
+                  proofs: List[Proof]): Future[Axiom] = {
+    val axiomFullName: String = Naming.mapName(prefix = "axiom_", name = name, category = Namespace.Axiom)
     for (typParams <- Utils.typParametersOfProp(prop);
          valParams <- Utils.valParametersOfProp(prop)) yield {
 
@@ -92,33 +140,36 @@ object Axiom {
 
       output.synchronized {
         output.println(s"/-- Def of Isabelle axiom $name: ${prop.pretty(ctxt)} -/")
-        output.println(s"noncomputable def $fullName")
+        output.println(s"noncomputable def $axiomFullName")
         if (typParams.nonEmpty)
-          val typParamsString = typParams map { p => Parentheses(p.identifier) } mkCord " "
+          val typParamsString = Utils.parenList(typParams.map(_.outputTerm))
           output.println(cord"     /- Type params -/   $typParamsString")
         if (constants.nonEmpty)
-          val constsString = constants.map ( c => Parentheses(c.asParameterTerm) )
-            .mkCord("\n                         ")
+          val constsString = Utils.parenList(constants.map(_.asParameterTerm), sep = "\n                         ")
           output.println(cord"     /- Constants -/     $constsString")
         output.print("  := ")
         if (valParams.nonEmpty)
-          val valParamsString = valParams map { c => Parentheses(c.outputTerm) } mkCord " "
+          val valParamsString = Utils.parenList(valParams.map(_.outputTerm))
           output.print(cord"/- Value params -/  forall $valParamsString,\n     ")
         output.println(propString)
         output.println()
+        for (proof <- proofs) {
+          val proofValParams = valParams.map(_.substitute(TypSubstitution(typParams, proof.typArgs)))
+          // TODO: Needs to abstract over the free type variables
+          val proofTypParamString = Utils.parenList(proof.typParams.map(_.outputTerm), prefix = " ")
+          val proofValParamString = Utils.parenList(proofValParams.map(_.outputTerm), prefix = " ")
+          val proofProp = IsabelleOps.substituteTypsInTerm(typParams.map(_.typ).zipStrict(proof.typArgs.map(_.typ)), prop).retrieveNow
+          val proofPropOutputTerm = Utils.translateTermClean(proofProp, constants = ForgetfulBuffer(constant => assert(constant.isDefined)))
+          output.println(cord"/-- Proof of Isabelle axiom $name ${prop.pretty(ctxt)}, for typ args ${proof.typArgs.mkCord(", ")} -/")
+          output.println(cord"noncomputable def ${proof.fullName}$proofTypParamString$proofValParamString : ${proofPropOutputTerm}")
+          output.println(cord"  := ${proof.body}")
+          output.println()
+        }
         output.flush()
       }
 
-/*      if (name == "Pure.equal_elim") {
-        println("******************")
-        println(s"Constants: ${constants.map(_.constant.name)}")
-        println(s"Constants: ${constants.map(_.typ.pretty)}")
-        println(s"Constants: ${constants.map(_.constant.typ.pretty)}")
-        println(s"Defined:   ${constants.map(_.isDefined)}")
-        Console.out.flush()
-      }*/
-
-      Axiom(fullName = fullName, typParams = typParams, name = name, prop = prop, constants = constants)
+      Axiom(fullName = axiomFullName, typParams = typParams, name = name, prop = prop, constants = constants,
+        proofs = proofs)
     }
   }
 

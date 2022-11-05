@@ -38,6 +38,7 @@ object Globals {
   implicit val ctxt: Context = Context(thy).setMode(Context.Mode.schematic)
   /** Synchronize printing via [[output]]. */
   val output = new PrintWriter(new FileOutputStream("test.lean"))
+  val outputDir = Path.of("target/lean")
 
   val tryToParallelize = true
 }

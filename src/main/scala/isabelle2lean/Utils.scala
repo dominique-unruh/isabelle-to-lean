@@ -148,6 +148,7 @@ object Utils {
 
 
   extension[A] (list: List[A]) {
+    /** Like .zip but fails if lists have different lengths */
     def zipStrict[B](other: List[B]): List[(A, B)] = list match
       case head :: tail => other match
         case ohead :: otail => (head, ohead) :: tail.zipStrict(otail)
