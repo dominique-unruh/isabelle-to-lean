@@ -42,4 +42,14 @@ object IsabelleOps {
   val theoryLongName = compileFunction[Theory, String]("Context.theory_long_name")
   val parentsOf = compileFunction[Theory, List[String]]("fn thy => Context.parents_of thy |> map Context.theory_long_name")
   val theoryOfConstant = compileFunction[Theory, String, String]("fn (thy, const) => Name_Space.the_entry_theory_name (Sign.consts_of thy |> Consts.space_of) const")
+  val getAxiomsOf = compileFunction[Theory, List[(String, Term)]](
+    """fn thy => let
+      |  val thy_name = Context.theory_name thy
+      |  val axiom_space = Theory.axiom_space thy
+      |  in Theory.all_axioms_of thy
+      |      |> map_filter (fn (name, prop) =>
+      |                         if thy_name =  Name_Space.the_entry_theory_name axiom_space name
+      |                         then SOME (name, prop) else NONE)
+      |  end
+      |""".stripMargin)
 }

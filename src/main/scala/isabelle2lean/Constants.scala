@@ -19,5 +19,9 @@ object Constants {
 //  def compute(name: String): Future[Constant] =
 //    nameMap.computeIfAbsent(name, _ => Constant.createConstant(name, Globals.output))
 
-  def get(name: String): Constant = nameMap.get(name)
+  def get(name: String): Constant = {
+    val result = nameMap.get(name)
+    assert(result != null, name)
+    result
+  }
 }

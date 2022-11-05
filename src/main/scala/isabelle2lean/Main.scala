@@ -56,13 +56,13 @@ object Main {
   }
 
   def proveAxiom(name: String, prop: String, tparams: List[String], body: String): Unit = {
-    await(Axioms.add(name, Axiom.createAxiom(name, prop = Term(ctxt, prop, Type("prop")).concreteRecursive, output = output,
-      proofs = List(
-        Axiom.Proof(name = name,
-          typArgs = tparams.map { name => ITyp(TypeVariable.tvar(name, 0).typ) },
-          typParams = tparams.map { name => TypeVariable.tvar(name, 0) },
-          body = Cord(body))
-      ))))
+    val axiom = Axioms.get(name)
+    val theory = await(Theories.compute(axiom.theoryName))
+    axiom.createProof(
+      typArgs = tparams.map { name => ITyp(TypeVariable.tvar(name, 0).typ) },
+      typParams = tparams.map { name => TypeVariable.tvar(name, 0) },
+      body = Cord(body),
+      theory = theory)
   }
 
   def main(args: Array[String]): Unit = {
@@ -88,6 +88,10 @@ object Main {
 //    val holThy = await(Theories.compute("HOL.HOL"))
     val natThy = await(Theories.compute("HOL.Nat"))
 
+    println("Created theories")
+
+    // TODO: These constants need to be defined *before* the axiom types are added in Theories.compute above
+
     defineConstant("Pure.imp", "prop => prop => prop", "fun p q => p -> q")
     defineConstant("Pure.prop", "prop => prop", "fun p => p")
     defineConstant("Pure.eq", "?'a::{} => ?'a => prop", List("'a"), "fun p q => p = q")
@@ -107,12 +111,16 @@ object Main {
       "int => int => int" -> "Int.add",
     ))
 
+    println("Added defined constants")
+
     // TODO: get the prop argument from the theory
     proveAxiom("Pure.equal_elim", "⟦PROP ?A ≡ PROP ?B; PROP ?A⟧ ⟹ PROP ?B", Nil, "cast")
     proveAxiom("Pure.symmetric", "?x::?'a::{} ≡ ?y ⟹ ?y ≡ ?x", List("'a"), "Eq.symm")
     proveAxiom("Pure.reflexive", "?x::?'a::{} ≡ ?x", List("'a"), "Eq.refl x0")
     proveAxiom("Pure.combination", "⟦?f::?'a::{} => ?'b::{} ≡ ?g; ?x ≡ ?y⟧ ⟹ ?f ?x ≡ ?g ?y", List("'a", "'b"), "congr")
     proveAxiom("Pure.transitive", "⟦?x::?'a::{} ≡ ?y; ?y ≡ ?z⟧ ⟹ ?x ≡ ?z", List("'a"), "Eq.trans")
+
+    println("Added proven axioms")
 
     val futures = thmNames map { thmName =>
       for (thm <- Thm(ctxt, thmName).forceFuture;

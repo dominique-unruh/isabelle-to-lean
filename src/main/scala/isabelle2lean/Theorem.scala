@@ -144,9 +144,10 @@ object Theorem {
       case Proofterm.Abst(name, typ, proof) => findAxioms(proof)
       case Proofterm.Hyp(term) => Future.unit
       case Proofterm.PAxm(name, term, typs) =>
-        for (axiom <- Axioms.compute(name, term);
-             _ = assert(typs.nonEmpty);
-             instantiated <- axiom.instantiate(typs.get.map(ITyp.apply)))
+        val axiom = Axioms.get(name);
+        assert(axiom.prop == term);
+        assert(typs.nonEmpty);
+        for (instantiated <- axiom.instantiate(typs.get.map(ITyp.apply)))
           yield
             if (!instantiated.isProven)
               axiomsBuffer.addOne(instantiated)

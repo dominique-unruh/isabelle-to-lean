@@ -11,19 +11,27 @@ import Globals.given
 object Axioms {
   def count: Int = nameMap.size
 
-  private val nameMap = new ConcurrentHashMap[String, Future[Axiom]]()
+  private val nameMap = new ConcurrentHashMap[String, Axiom]()
 
-  def add(name: String, axiom: Future[Axiom]): Future[Unit] =
-    if (nameMap.putIfAbsent(name, axiom) != null)
+  /** Only use from ITheory.createTheory */
+  def add(axiom: Axiom): Unit =
+    if (nameMap.putIfAbsent(axiom.name, axiom) != null)
       throw new RuntimeException("Double add")
-    for (axiomNow <- axiom)
-      yield assert(name == axiomNow.name)
 
+/*
+  // TODO: remove
   def compute(name: String, prop: Term): Future[Axiom] =
     for (concreteProp <- Future.successful(prop.concreteRecursive); // TODO: there should be a non-blocking variant of this
-         result <- nameMap.computeIfAbsent(name, _ => Axiom.createAxiom(name, concreteProp, Globals.output, proofs = Nil)))
+         result <- nameMap.computeIfAbsent(name, _ => Axiom.createAxiom(name = name, prop = concreteProp, output = Globals.output)))
       yield {
         assert(prop == result.prop, (prop, result.prop))
         result
       }
+*/
+
+  def get(name: String): Axiom = {
+    val result = nameMap.get(name)
+    assert(result != null, name)
+    result
+  }
 }

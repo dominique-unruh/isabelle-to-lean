@@ -23,8 +23,11 @@ case class Axiom private[Axiom] (fullName: String, name: String,
                                  // TODO: This is actually not really needed. Remove for efficiency (or just MLValue-ref)
                                  prop: ConcreteTerm,
                                  constants: List[Constant#Instantiated], typParams: List[TypeVariable],
-                                 proofs: List[Axiom.Proof]) {
+                                 theoryName: String,
+                                 valParams: List[ValueVariable]) {
   override def toString: String = s"Axiom($name)"
+
+  private var proofs: List[Proof] = Nil
 
   def shortSummary: Cord = cord"$name: ${prop.pretty(ctxt)}"
 
@@ -103,14 +106,10 @@ case class Axiom private[Axiom] (fullName: String, name: String,
 
     def isProven: Boolean = proofMatch.nonEmpty
   }
-}
 
-object Axiom {
   /** A proof of the axiom, possibly at a smaller type */
-  case class Proof(name: String,
-                   /** Type arguments with which the Axiom type is instantiated */
+  case class Proof(/** Type arguments with which the Axiom type is instantiated */
                    typArgs: List[ITyp],
-                   body: Cord,
                    /** Type parameters this axiom's proof has */
                    typParams: List[TypeVariable] = Nil) {
     val fullName: String = Naming.mapName(name = name, extra = typArgs, category = Namespace.AxiomProof)
@@ -121,15 +120,36 @@ object Axiom {
           m match
             case None => None
             case Some(matchTyps) =>
-              val matchTypMap = Map.from( matchTyps.map { case (name,index,typ) => TypeVariable.tvar(name,index) -> ITyp(typ) } )
+              val matchTypMap = Map.from(matchTyps.map { case (name, index, typ) => TypeVariable.tvar(name, index) -> ITyp(typ) })
               val typArgs = typParams.map(matchTypMap)
-              Some(Application(atIdentifier, typArgs.map(_.outputTerm) :_*))
+              Some(Application(atIdentifier, typArgs.map(_.outputTerm): _*))
 
     def atIdentifier: Identifier = Identifier(fullName, at = true)
   }
 
-  def createAxiom(name: String, prop: ConcreteTerm, output: PrintWriter,
-                  proofs: List[Proof]): Future[Axiom] = {
+  def createProof(typArgs: List[ITyp], body: Cord, typParams: List[TypeVariable], theory: ITheory): Proof = {
+    val proofValParams = valParams.map(_.substitute(TypSubstitution(typParams, typArgs)))
+    val proof = Proof(typArgs, typParams)
+    val proofTypParamString = Utils.parenList(typParams.map(_.outputTerm), prefix = " ")
+    val proofValParamString = Utils.parenList(proofValParams.map(_.outputTerm), prefix = " ")
+    val proofProp = IsabelleOps.substituteTypsInTerm(typParams.map(_.typ).zipStrict(typArgs.map(_.typ)), prop).retrieveNow
+    val proofPropOutputTerm = Utils.translateTermClean(proofProp, constants = ForgetfulBuffer(constant => assert(constant.isDefined, constant)))
+    theory.println(
+      cord"""/-- Proof of Isabelle axiom $name ${prop.pretty(ctxt)}, for typ args ${typArgs.mkCord(", ")} -/
+noncomputable def ${proof.fullName}$proofTypParamString$proofValParamString : ${proofPropOutputTerm}
+  := $body
+""")
+    synchronized {
+      proofs = proof :: proofs
+      cache.clear() // We could also just filter out everything with !.isProven
+    }
+    proof
+  }
+}
+
+object Axiom {
+
+  def createAxiom(name: String, prop: ConcreteTerm, output: PrintWriter, theory: String): Future[Axiom] = {
     val axiomFullName: String = Naming.mapName(prefix = "axiom_", name = name, category = Namespace.Axiom)
     for (typParams <- Utils.typParametersOfProp(prop);
          valParams <- Utils.valParametersOfProp(prop)) yield {
@@ -153,23 +173,11 @@ object Axiom {
           output.print(cord"/- Value params -/  forall $valParamsString,\n     ")
         output.println(propString)
         output.println()
-        for (proof <- proofs) {
-          val proofValParams = valParams.map(_.substitute(TypSubstitution(typParams, proof.typArgs)))
-          // TODO: Needs to abstract over the free type variables
-          val proofTypParamString = Utils.parenList(proof.typParams.map(_.outputTerm), prefix = " ")
-          val proofValParamString = Utils.parenList(proofValParams.map(_.outputTerm), prefix = " ")
-          val proofProp = IsabelleOps.substituteTypsInTerm(typParams.map(_.typ).zipStrict(proof.typArgs.map(_.typ)), prop).retrieveNow
-          val proofPropOutputTerm = Utils.translateTermClean(proofProp, constants = ForgetfulBuffer(constant => assert(constant.isDefined)))
-          output.println(cord"/-- Proof of Isabelle axiom $name ${prop.pretty(ctxt)}, for typ args ${proof.typArgs.mkCord(", ")} -/")
-          output.println(cord"noncomputable def ${proof.fullName}$proofTypParamString$proofValParamString : ${proofPropOutputTerm}")
-          output.println(cord"  := ${proof.body}")
-          output.println()
-        }
         output.flush()
       }
 
       Axiom(fullName = axiomFullName, typParams = typParams, name = name, prop = prop, constants = constants,
-        proofs = proofs)
+        valParams = valParams, theoryName = theory)
     }
   }
 

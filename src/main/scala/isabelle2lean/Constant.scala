@@ -123,21 +123,24 @@ case class Constant(typeFullName: String, name: String, typ: ITyp,
 noncomputable def ${definition.fullName}${defTypParamString} : ${typ.outputTerm}
 := ${definition.body}
 """)
-    synchronized { definitions = definition :: definitions }
+    synchronized { 
+      definitions = definition :: definitions
+      cache.clear() // We could also just filter out everything with !.isDefined
+    }
     definition
   }
 }
 
 object Constant {
 
-  def createConstant(theory: String, name: String, output: PrintWriter) : Future[Constant] = {
+  def createConstant(theory: String, name: String, output: PrintWriter, typ: ITyp) : Future[Constant] = {
     val typeFullName: String = Naming.mapName(name = name, category = Namespace.ConstantType)
 
     // TODO: When called from ITheory, we already have the typ. Don't query again?
-    for (typ0 <- IsabelleOps.theConstType(Globals.thy, name).retrieve;
-         typParams0 <- IsabelleOps.constTypargs(Globals.thy, name, typ0).retrieve)
+    for (/*typ0 <- IsabelleOps.theConstType(Globals.thy, name).retrieve;
+         */typParams0 <- IsabelleOps.constTypargs(Globals.thy, name, typ.typ).retrieve)
     yield {
-      val typ = ITyp(typ0)
+//      val typ = ITyp(typ0)
       val typParams = typParams0 map {
         case typ @ TVar(name, index, sort) =>
           assert(sort.isEmpty || sort == List("HOL.type"), sort)

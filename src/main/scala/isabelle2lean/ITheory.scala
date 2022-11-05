@@ -26,10 +26,8 @@ object ITheory {
       output.println(s"/- Theory $name, imported from Isabelle/HOL -/")
       output.println()
       output.println("import IsabelleHOL.IsabelleHOLPreamble")
-      for (parent <- parents) {
-        println(parent)
+      for (parent <- parents)
         output.println(s"import IsabelleHOL.$parent")
-      }
       output.println()
       output.println(
         """set_option linter.unusedVariables false
@@ -46,12 +44,16 @@ object ITheory {
          parents <- IsabelleOps.parentsOf(thy).retrieve;
          _ = outputHeader(parents);
          parentTheories <- Future.sequence(parents.map(Theories.compute));
-         constants <- Future.sequence(isabelleConstants.map((constName, typ) => Constant.createConstant(theory = name, name = constName, output = output))))
+         constants <- Future.sequence(isabelleConstants.map((constName, typ) =>
+           Constant.createConstant(theory = name, name = constName, output = output, typ = ITyp(typ))));
+         _ = for (constant <- constants) Constants.add(constant);
+         isabelleAxioms <- IsabelleOps.getAxiomsOf(thy).retrieve;
+         axioms <- Future.sequence(isabelleAxioms.map((axiomName, prop) =>
+           Axiom.createAxiom(name = axiomName, prop = prop.concreteRecursive, output = output, theory = name))))
     yield {
-      for (constant <- constants)
-        // TODO: don't wrap in Future:
-        Constants.add(constant)
+      for (axiom <- axioms) Axioms.add(axiom)
       output.flush()
+      println(s"Created $name")
       ITheory(name, output)
     }
   }
