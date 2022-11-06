@@ -3,13 +3,15 @@ package isabelle2lean
 import de.unruh.isabelle.pure.{App, Const, Term, Theory, Typ}
 
 import java.io.PrintWriter
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import Globals.{config, given}
 import de.unruh.isabelle.mlvalue.Implicits.given
-import de.unruh.isabelle.pure.Implicits.given
+import de.unruh.isabelle.pure.Implicits.{toplevelStateConverter, given}
 import scalaz.Cord
 
 import java.nio.file.Files
+import scala.collection.mutable
+import scala.concurrent.duration.Duration
 import scala.sys.Prop
 
 class ITheory private(name: String, val output: PrintWriter) {
@@ -17,7 +19,7 @@ class ITheory private(name: String, val output: PrintWriter) {
 }
 
 object ITheory {
-  private def createDefinitions(axioms: List[(String, Term, Long)], theory: String, output: PrintWriter): Future[Unit] = {
+  private def createDefinitions(axioms: List[(String, Term)], theory: String, output: PrintWriter): Unit = {
     // Manual definitions
     for (defi <- config.definitions
          if defi.theory == theory) {
@@ -34,26 +36,44 @@ object ITheory {
     }
 
     // Auto definitions
-    def createDef(name: String, prop: Term, serial: Long) =
+    def createDef(name: String, prop: Term) : Option[Boolean] =
       prop match {
         case App(App(Const("Pure.eq", _), Const(constName, typ)), body) =>
-          println(s"Autogen def $constName, $name, $serial")
+          println(s"Considering autogen for $constName ($name)")
           val ityp = ITyp(typ)
-          val constant = Constants.get(constName)
-          for (typParams <- Utils.typParametersOfProp(prop))
-            yield
-              // TODO: check that all `this.typParams` occur in `ityp`
-              constant.createDefinition(typ = ityp, body = Utils.translateTermClean(body).toCord, typParams = typParams, output = output)
+          val dependsOn = UniqueListBuffer.empty[Constant#Instantiated]
+          Utils.translateTermClean(body, constants = dependsOn)
+          if (dependsOn.nonEmpty) {
+            println(s"Nope (depends on ${dependsOn.map(_.fullName).mkString(", ")})")
+            None // means: has not been consumed, and nothing has changed
+          } else {
+            println(s"Looks good")
+            val constant = Constants.get(constName)
+            val typParams = Await.result(Utils.typParametersOfProp(prop), Duration.Inf)
+            // TODO: check that all `this.typParams` occur in `ityp`
+            constant.createDefinition(typ = ityp, body = Utils.translateTermClean(body).toCord, typParams = typParams, output = output)
+            Some(true) // means: has been consumed and something has changed
+          }
         case _ =>
-          Future.unit
+          Some(false) // means: has been consumed and nothing has changed
       }
 
-    def createDefs(axioms: List[(String, Term, Long)]): Future[Unit] = axioms match
-      case ::((name, prop, serial), rest) => for (_ <- createDef(name, prop, serial); _ <- createDefs(rest)) yield {}
-      case Nil => Future.unit
+    var changed = true
+    var axioms2 = axioms
+    while (changed) {
+      changed = false
+      val axioms3 = new mutable.ListBuffer[(String, Term)]
+      for (axiom <- axioms2)
+        createDef(axiom._1, axiom._2) match
+          case Some(thisChanged) =>
+            changed = changed || thisChanged
+          case None =>
+            axioms3 += axiom
+      axioms2 = axioms3.result()
+    }
+    println(s"Definitions that I could not create due to cyclicity: ${axioms2.map(_._1).mkString(", ")}")
+    println(s"Definitions that I could not create due to other reasons: ???")
 
-    // TODO: sorting by serial number does not work, unfortunately. :(
-    createDefs(axioms.sortBy(_._3))
   }
 
   def createTheory(name: String): Future[ITheory] = {
@@ -88,8 +108,8 @@ object ITheory {
            Constant.createConstant(theory = name, name = constName, output = output, typ = ITyp(typ))));
          _ = for (constant <- constants) Constants.add(constant);
          isabelleAxioms <- IsabelleOps.getAxiomsOf(thy).retrieve;
-         _ <- createDefinitions(axioms = isabelleAxioms, output = output, theory = name);
-         axioms <- Future.sequence(isabelleAxioms.map((axiomName, prop, serial) =>
+         _ = createDefinitions(axioms = isabelleAxioms, output = output, theory = name);
+         axioms <- Future.sequence(isabelleAxioms.map((axiomName, prop) =>
            Axiom.createAxiom(name = axiomName, prop = prop.concreteRecursive, output = output, theory = name))))
     yield {
       for (axiom <- axioms) Axioms.add(axiom)
