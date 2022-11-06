@@ -76,6 +76,22 @@ object ITheory {
 
   }
 
+  private def createProofs(axioms: List[Axiom], output: PrintWriter): Unit = for (axiom <- axioms) {
+    axiom.prop match {
+      case App(App(Const("Pure.eq", _), Const(constName, typ0)), body) =>
+        val typ = ITyp(typ0)
+        val constant = Constants.get(constName).instantiate(typ)
+        constant.definitionMatch match {
+          case None =>
+          case Some(_) =>
+            // TODO: Should check if rhs of axiom matches rhs of definition
+            axiom.createProof(typArgs = axiom.typParams.map(_.typ),
+              body = Cord("by rfl"), typParams = axiom.typParams, output = output)
+        }
+      case _ =>
+    }
+  }
+
   def createTheory(name: String): Future[ITheory] = {
     println(s"Starting theory $name")
     val outputFile = Globals.outputDir.resolve(s"${name.replace('.','/')}.lean")
@@ -110,7 +126,8 @@ object ITheory {
          isabelleAxioms <- IsabelleOps.getAxiomsOf(thy).retrieve;
          _ = createDefinitions(axioms = isabelleAxioms, output = output, theory = name);
          axioms <- Future.sequence(isabelleAxioms.map((axiomName, prop) =>
-           Axiom.createAxiom(name = axiomName, prop = prop.concreteRecursive, output = output, theory = name))))
+           Axiom.createAxiom(name = axiomName, prop = prop.concreteRecursive, output = output, theory = name)));
+         _ = createProofs(axioms = axioms, output = output))
     yield {
       for (axiom <- axioms) Axioms.add(axiom)
       output.flush()

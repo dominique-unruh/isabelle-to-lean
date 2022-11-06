@@ -148,7 +148,7 @@ noncomputable def ${proof.fullName}$proofTypParamString$proofValParamString : ${
     proof
   }
 
-  def makeProofIfPossible(output: PrintWriter): Any = {
+/*  def makeProofIfPossible(output: PrintWriter): Any = {
     prop match {
       case App(App(Const("Pure.eq", _), Const(name, typ)), body) =>
         println(s"**** Could define $name")
@@ -163,7 +163,7 @@ noncomputable def ${proof.fullName}$proofTypParamString$proofValParamString : ${
           body = Cord("Eq.refl"), typParams = this.typParams, output = output)
       case _ =>
     }
-  }
+  }*/
 }
 
 object Axiom {
