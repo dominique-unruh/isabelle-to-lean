@@ -2,5 +2,7 @@
 /target
 /.idea
 /.bsp
-/test.lean
 /project/project/target
+/src/main/lean/build
+/src/main/lean/test.lean
+/src/main/lean/IsabelleHOL/AutoGen

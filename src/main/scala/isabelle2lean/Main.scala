@@ -32,8 +32,8 @@ object Main {
 //          "Binomial.binomial_eq_0",
   )
 
-  
-  
+
+
   def await[A](awaitable: Awaitable[A]): A = Await.result(awaitable, Duration.Inf)
 
   def defineConstant(name: String, typ: String, body: String): Unit = {
@@ -66,8 +66,8 @@ object Main {
       body = Cord(body),
       output = theory.output)
   }
-  
-  
+
+
   def main(args: Array[String]): Unit = {
     Globals.isabelle.await
 
@@ -77,14 +77,14 @@ object Main {
     Globals.stopWatch.start()
 
     output.synchronized {
-      output.println("""import IsabelleHOL.HOL.Nat
+      output.println("""import IsabelleHOL.AutoGen.HOL.Nat
                        |set_option linter.unusedVariables false
                        |set_option autoImplicit false
                        |""".stripMargin)
       output.println()
     }
 
-    FileUtils.copyDirectory(new File("src/main/lean"), new File("target/lean"))
+//    FileUtils.copyDirectory(new File("src/main/lean"), new File("target/lean"))
 //    Files.writeString(Globals.outputDir.resolve("IsabelleHOLPreamble.lean"), preamble)
 
 //    val pureThy = await(Theories.compute("Pure"))
@@ -92,11 +92,6 @@ object Main {
     val natThy = await(Theories.compute("HOL.Nat"))
 
     println("Created theories")
-
-    // TODO: These constants need to be defined *before* the axiom types are added in Theories.compute above
-
-  
-    println("Added defined constants")
 
     // TODO: get the prop argument from the theory
     proveAxiom("Pure.equal_elim", "⟦PROP ?A ≡ PROP ?B; PROP ?A⟧ ⟹ PROP ?B", Nil, "cast")
@@ -129,7 +124,7 @@ object Main {
     println("****** Done ******")
   }
 
-  def preamble: String =
+/*  def preamble: String =
 //    IOUtils.toString(getClass.getResource("/IsabelleHOLPreamble.lean"), "utf-8")
-    Files.readString(Paths.get("src/main/lean/IsabelleHOL/IsabelleHOLPreamble.lean"))
+    Files.readString(Paths.get("src/main/lean/IsabelleHOL/IsabelleHOLPreamble.lean"))*/
 }

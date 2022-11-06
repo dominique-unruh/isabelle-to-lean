@@ -2,6 +2,7 @@ import Lake
 open Lake DSL
 
 package isabelleHOL {
+  isLeanOnly := true
   -- add package configuration options here
 }
 

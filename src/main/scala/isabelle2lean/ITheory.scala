@@ -78,7 +78,7 @@ object ITheory {
 
   def createTheory(name: String): Future[ITheory] = {
     println(s"Starting theory $name")
-    val outputFile = Globals.outputDir.resolve(s"IsabelleHOL/${name.replace('.','/')}.lean")
+    val outputFile = Globals.outputDir.resolve(s"${name.replace('.','/')}.lean")
     Files.createDirectories(outputFile.getParent)
     val output = new PrintWriter(outputFile.toFile, "utf-8")
 
@@ -87,7 +87,7 @@ object ITheory {
       output.println()
       output.println("import IsabelleHOL.IsabelleHOLPreamble")
       for (parent <- parents)
-        output.println(s"import IsabelleHOL.$parent")
+        output.println(s"import IsabelleHOL.AutoGen.$parent")
       output.println()
       output.println(
         """set_option linter.unusedVariables false
