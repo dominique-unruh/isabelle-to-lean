@@ -32,6 +32,8 @@ object Main {
 //          "Binomial.binomial_eq_0",
   )
 
+  
+  
   def await[A](awaitable: Awaitable[A]): A = Await.result(awaitable, Duration.Inf)
 
   def defineConstant(name: String, typ: String, body: String): Unit = {
@@ -42,7 +44,7 @@ object Main {
     val constant = Constants.get(name)
     val theory = await(Theories.compute(constant.theoryName))
     for ((typ,body) <- defs) {
-      constant.createDefinition(ITyp.parse(typ), Cord(body), Nil, theory)
+      constant.createDefinition(ITyp.parse(typ), Cord(body), Nil, theory.output)
     }
   }
 
@@ -51,7 +53,7 @@ object Main {
     val theory = await(Theories.compute(constant.theoryName))
     constant.createDefinition(typ = ITyp.parse(typ), body = Cord(body),
       typParams = tparams.map { name => TypeVariable.tvar(name, 0) },
-      theory = theory
+      output = theory.output
     )
   }
 
@@ -59,12 +61,13 @@ object Main {
     val axiom = Axioms.get(name)
     val theory = await(Theories.compute(axiom.theoryName))
     axiom.createProof(
-      typArgs = tparams.map { name => ITyp(TypeVariable.tvar(name, 0).typ) },
+      typArgs = tparams.map { name => TypeVariable.tvar(name, 0).typ },
       typParams = tparams.map { name => TypeVariable.tvar(name, 0) },
       body = Cord(body),
-      theory = theory)
+      output = theory.output)
   }
-
+  
+  
   def main(args: Array[String]): Unit = {
     Globals.isabelle.await
 
@@ -92,25 +95,7 @@ object Main {
 
     // TODO: These constants need to be defined *before* the axiom types are added in Theories.compute above
 
-    defineConstant("Pure.imp", "prop => prop => prop", "fun p q => p -> q")
-    defineConstant("Pure.prop", "prop => prop", "fun p => p")
-    defineConstant("Pure.eq", "?'a::{} => ?'a => prop", List("'a"), "fun p q => p = q")
-    defineConstant("HOL.eq", "?'a::{} => ?'a => bool", List("'a"), "fun p q => (Classical.propDecidable (p = q)).decide")
-    defineConstant("Pure.all", "(?'a::{} => prop) => prop", List("'a"), "fun f => ∀x, f x")
-    defineConstant("HOL.All", "(?'a::{} => bool) => bool", List("'a"), "fun f => (Classical.propDecidable (∀x, f x = true)).decide")
-    defineConstant("HOL.Trueprop", "bool => prop", "fun b => b = true")
-    defineConstant("HOL.conj", "bool => bool => bool", "and")
-    defineConstant("HOL.disj", "bool => bool => bool", "or")
-    defineConstant("HOL.implies", "bool => bool => bool", "fun a b => (!a) || b")
-    defineConstant("HOL.Not", "bool => bool", "not")
-    defineConstant("HOL.True", "bool", "Bool.true")
-    defineConstant("HOL.False", "bool", "Bool.false")
-    defineConstant("Nat.Suc", "nat => nat", "Nat.succ")
-    defineConstant("Groups.plus_class.plus", List(
-      "nat => nat => nat" -> "Nat.add",
-      "int => int => int" -> "Int.add",
-    ))
-
+  
     println("Added defined constants")
 
     // TODO: get the prop argument from the theory

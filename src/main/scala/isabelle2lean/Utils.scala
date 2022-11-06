@@ -175,18 +175,18 @@ object Utils {
     def mkCord(sep: String): Cord = mkCord(Cord(sep))
   }
 
-  def substituteTyp(typ: ITyp, subst: IterableOnce[(TypeVariable, ITyp)]): Future[ITyp] = {
+/*  def substituteTyp(typ: ITyp, subst: IterableOnce[(TypeVariable, ITyp)]): Future[ITyp] = {
     val subst2: List[(Typ, Typ)] = subst.iterator.map { case (t, u) => (t.typ, u.typ) }.toList
     IsabelleOps.substituteTyp(subst2, typ.typ).retrieve
       .map(ITyp.apply)
-  }
+  }*/
 
-  def substituteTypArgs(typArgs: List[ITyp], subst: IterableOnce[(TypeVariable, ITyp)]): Future[List[ITyp]] = {
+  /*def substituteTypArgs(typArgs: List[ITyp], subst: IterableOnce[(TypeVariable, ITyp)]): Future[List[ITyp]] = {
     val subst2: List[(Typ, Typ)] = subst.iterator.map { case (t, u) => (t.typ, u.typ) }.toList
     val typArgs2 = typArgs.map(arg => IsabelleOps.substituteTyp(subst2, arg.typ).retrieve)
     Future.sequence(typArgs2)
       .map(_.map(ITyp.apply))
-  }
+  }*/
 
   def parenList(terms: Iterable[OutputTerm], parens: String = "()", sep: String = " ", prefix: String = " "): Cord =
     if (terms.isEmpty) Cord.monoid.zero
@@ -233,5 +233,9 @@ object Utils {
     }
 
     strip(thm.proofOf)
+  }
+
+  def printto(output: PrintWriter, text: Cord): Unit = output.synchronized {
+    output.println(text.shows)
   }
 }

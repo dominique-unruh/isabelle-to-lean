@@ -37,19 +37,18 @@ case class Theorem(fullName: String, name: String, serial: Serial, axioms: List[
     override def hashCode(): Int = ???
   }
 
-  private val cache = new ConcurrentHashMap[List[ITyp], Future[Instantiated]]()
+  private val cache = new ConcurrentHashMap[List[ITyp], Instantiated]()
 
-  def instantiate(typs: List[ITyp]): Future[Instantiated] = {
+  def instantiate(typs: List[ITyp]): Instantiated = {
     lookups.incrementAndGet()
     cache.computeIfAbsent(typs, { _ =>
       Theorem.misses.incrementAndGet()
-      val subst = typParams.zipStrict(typs)
-      for (axioms <- Future.sequence (this.axioms.map (_.substitute (subst) ) ) )
-        yield
-          new Instantiated (typs = typs, axioms = axioms)
+      val subst = TypSubstitution(typParams, typs)
+      val axioms = this.axioms.map (_.substitute (subst) )
+      new Instantiated (typs = typs, axioms = axioms)
     })}
 
-  def instantiate(pthm: PThm): Future[Instantiated] = {
+  def instantiate(pthm: PThm): Instantiated = {
     val typs = pthm.header.types.getOrElse(throw RuntimeException(s"No type instantiation provided in theorem $pthm"))
       .map(ITyp.apply)
     instantiate(typs)
@@ -147,16 +146,16 @@ object Theorem {
         val axiom = Axioms.get(name);
         assert(axiom.prop == term);
         assert(typs.nonEmpty);
-        for (instantiated <- axiom.instantiate(typs.get.map(ITyp.apply)))
-          yield
-            if (!instantiated.isProven)
-              axiomsBuffer.addOne(instantiated)
+        val instantiated = axiom.instantiate(typs.get.map(ITyp.apply))
+        if (!instantiated.isProven)
+          axiomsBuffer.addOne(instantiated)
+        Future.unit
       case Proofterm.PBound(index) => Future.unit
       case Proofterm.OfClass(typ, clazz) => ???
       case Proofterm.Oracle(name, term, typ) => ???
       case pthm @ PThm(header, body) =>
         for (thm <- Theorems.compute(pthm);
-             inst <- thm.instantiate(pthm))
+             inst = thm.instantiate(pthm))
           yield
             axiomsBuffer.addAll(inst.axioms.filterNot(_.isProven))
     for (_ <- findAxioms(proof))

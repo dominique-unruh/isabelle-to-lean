@@ -12,7 +12,9 @@ object IsabelleOps {
   val addFrees = compileFunction[Term, List[(String, Typ)]]("fn t => Term.add_frees t []")
   val addVars = compileFunction[Term, List[((String, Int), Typ)]]("fn t => Term.add_vars t []")
   val addTFrees = compileFunction[Term, List[(String, List[String])]]("fn t => Term.add_tfrees t []")
+  val addTFreesT = compileFunction[Typ, List[(String, List[String])]]("fn t => Term.add_tfreesT t []")
   val addTVars = compileFunction[Term, List[((String, Int), List[String])]]("fn t => Term.add_tvars t []")
+  val addTVarsT = compileFunction[Typ, List[((String, Int), List[String])]]("fn t => Term.add_tvarsT t []")
   val theConstType = compileFunction[Theory, String, Typ]("fn (thy,name) => Sign.the_const_type thy name")
   val constTypargs = compileFunction[Theory, String, Typ, List[Typ]]("fn (thy,name,typ) => Sign.const_typargs thy (name,typ)")
   val substituteTyp = compileFunction[List[(Typ,Typ)], Typ, Typ]("fn (subst, typ) => typ_subst_atomic subst typ")
@@ -42,14 +44,16 @@ object IsabelleOps {
   val theoryLongName = compileFunction[Theory, String]("Context.theory_long_name")
   val parentsOf = compileFunction[Theory, List[String]]("fn thy => Context.parents_of thy |> map Context.theory_long_name")
   val theoryOfConstant = compileFunction[Theory, String, String]("fn (thy, const) => Name_Space.the_entry_theory_name (Sign.consts_of thy |> Consts.space_of) const")
-  val getAxiomsOf = compileFunction[Theory, List[(String, Term)]](
+  val getAxiomsOf = compileFunction[Theory, List[(String, Term, Long)]](
     """fn thy => let
-      |  val thy_name = Context.theory_name thy
+      |  val thy_name = Context.theory_long_name thy
       |  val axiom_space = Theory.axiom_space thy
       |  in Theory.all_axioms_of thy
       |      |> map_filter (fn (name, prop) =>
-      |                         if thy_name =  Name_Space.the_entry_theory_name axiom_space name
-      |                         then SOME (name, prop) else NONE)
+      |           let val entry = Name_Space.the_entry axiom_space name in
+      |           if thy_name = #theory_long_name entry
+      |           then SOME (name, prop, #serial entry) else NONE end)
       |  end
       |""".stripMargin)
+
 }

@@ -1,7 +1,7 @@
 package isabelle2lean
 
 import scala.language.implicitConversions
-import de.unruh.isabelle.pure.{ConcreteTerm, Term, Typ}
+import de.unruh.isabelle.pure.{App, ConcreteTerm, Const, Term, Typ}
 
 import java.io.PrintWriter
 import Globals.{ctxt, given}
@@ -38,17 +38,16 @@ case class Axiom private[Axiom] (fullName: String, name: String,
     case _ => false
   }
 
-  private val cache = new ConcurrentHashMap[List[ITyp], Future[Instantiated]]()
+  private val cache = new ConcurrentHashMap[List[ITyp], Instantiated]()
 
-  def instantiate(typArgs: List[ITyp]): Future[Instantiated] = {
+  def instantiate(typArgs: List[ITyp]): Instantiated = {
     lookups.incrementAndGet()
     cache.computeIfAbsent(typArgs, { _ =>
       misses.incrementAndGet()
       val fullName = Naming.mapName(name = name, extra = typArgs, category = Namespace.AxiomInstantiated)
-      val constants2 = constants.map(_.substitute(typParams.zipStrict(typArgs)))
-      for (constants3 <- Future.sequence(constants2))
-        yield
-          Instantiated(fullName = fullName, typArgs = typArgs, constants = constants3) })
+      val subst = TypSubstitution(typParams, typArgs)
+      val constants2 = constants.map(_.substitute(subst))
+      Instantiated(fullName = fullName, typArgs = typArgs, constants = constants2) })
   }
 
   inline def atIdentifier: Identifier = Identifier(fullName, at = true)
@@ -79,10 +78,9 @@ case class Axiom private[Axiom] (fullName: String, name: String,
       Identifier(fullName)
     }
 
-    def substitute(subst: IterableOnce[(TypeVariable, ITyp)]): Future[Instantiated] =
-      for (typArgs2 <- Utils.substituteTypArgs(typArgs, subst);
-           inst <- Axiom.this.instantiate(typArgs2))
-      yield inst
+    def substitute(subst: TypSubstitution): Instantiated =
+      val typArgs2 = typArgs.map(subst.substitute);
+      Axiom.this.instantiate(typArgs2)
 
     override def hashCode(): Int = fullName.hashCode
 
@@ -127,14 +125,18 @@ case class Axiom private[Axiom] (fullName: String, name: String,
     def atIdentifier: Identifier = Identifier(fullName, at = true)
   }
 
-  def createProof(typArgs: List[ITyp], body: Cord, typParams: List[TypeVariable], theory: ITheory): Proof = {
+  def createProof(typArgs: List[ITyp], body: Cord, typParams: List[TypeVariable], output: PrintWriter): Proof = {
     val proofValParams = valParams.map(_.substitute(TypSubstitution(typParams, typArgs)))
     val proof = Proof(typArgs, typParams)
     val proofTypParamString = Utils.parenList(typParams.map(_.outputTerm), prefix = " ")
     val proofValParamString = Utils.parenList(proofValParams.map(_.outputTerm), prefix = " ")
-    val proofProp = IsabelleOps.substituteTypsInTerm(typParams.map(_.typ).zipStrict(typArgs.map(_.typ)), prop).retrieveNow
+    val proofProp = TypSubstitution(typParams, typArgs).substitute(prop)
+    // TODO: The exception here is because constants are not created according to their dependency order.
+    // Solution: before creating proofs, or axiom types, we should make a first scan of the axioms to find all constants and order them by dependency
+    // and only then do we dump the axiom types
+    // Maybe: `Name_Space.the_entry_theory_name axiom_space name |> #serial` might give us something to sort by to get constants/axioms in declaration order
     val proofPropOutputTerm = Utils.translateTermClean(proofProp, constants = ForgetfulBuffer(constant => assert(constant.isDefined, constant)))
-    theory.println(
+    Utils.printto(output,
       cord"""/-- Proof of Isabelle axiom $name ${prop.pretty(ctxt)}, for typ args ${typArgs.mkCord(", ")} -/
 noncomputable def ${proof.fullName}$proofTypParamString$proofValParamString : ${proofPropOutputTerm}
   := $body
@@ -145,10 +147,26 @@ noncomputable def ${proof.fullName}$proofTypParamString$proofValParamString : ${
     }
     proof
   }
+
+  def makeProofIfPossible(output: PrintWriter): Any = {
+    prop match {
+      case App(App(Const("Pure.eq", _), Const(name, typ)), body) =>
+        println(s"**** Could define $name")
+        val ityp = ITyp(typ)
+        val constant = Constants.get(name)
+        println(constant)
+        // TODO: check that all `this.typParams` occur in `ityp`
+
+
+        constant.createDefinition(typ = ityp, body = Utils.translateTermClean(body).toCord, typParams = this.typParams, output = output)
+        createProof(typArgs = this.typParams.map(_.typ),
+          body = Cord("Eq.refl"), typParams = this.typParams, output = output)
+      case _ =>
+    }
+  }
 }
 
 object Axiom {
-
   def createAxiom(name: String, prop: ConcreteTerm, output: PrintWriter, theory: String): Future[Axiom] = {
     val axiomFullName: String = Naming.mapName(prefix = "axiom_", name = name, category = Namespace.Axiom)
     for (typParams <- Utils.typParametersOfProp(prop);
@@ -176,8 +194,12 @@ object Axiom {
         output.flush()
       }
 
-      Axiom(fullName = axiomFullName, typParams = typParams, name = name, prop = prop, constants = constants,
+      val axiom = Axiom(fullName = axiomFullName, typParams = typParams, name = name, prop = prop, constants = constants,
         valParams = valParams, theoryName = theory)
+
+//      axiom.makeProofIfPossible(output)
+
+      axiom
     }
   }
 

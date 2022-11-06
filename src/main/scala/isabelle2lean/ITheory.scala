@@ -1,21 +1,61 @@
 package isabelle2lean
 
-import de.unruh.isabelle.pure.Theory
+import de.unruh.isabelle.pure.{App, Const, Term, Theory, Typ}
 
 import java.io.PrintWriter
 import scala.concurrent.Future
-import Globals.given
+import Globals.{config, given}
 import de.unruh.isabelle.mlvalue.Implicits.given
 import de.unruh.isabelle.pure.Implicits.given
 import scalaz.Cord
 
 import java.nio.file.Files
+import scala.sys.Prop
 
-class ITheory private(name: String, output: PrintWriter) {
+class ITheory private(name: String, val output: PrintWriter) {
   def println(text: Cord): Unit = output.synchronized { output.println(text.shows); output.flush() }
 }
 
 object ITheory {
+  private def createDefinitions(axioms: List[(String, Term, Long)], theory: String, output: PrintWriter): Future[Unit] = {
+    // Manual definitions
+    for (defi <- config.definitions
+         if defi.theory == theory) {
+      val constant = Constants.get(defi.constant)
+      val typ = Typ(Globals.ctxt, defi.typ)
+      val ityp = ITyp(typ)
+      for (tvars <- IsabelleOps.addTVarsT(typ).retrieve;
+           tfrees <- IsabelleOps.addTFreesT(typ).retrieve)
+      yield {
+        assert(tfrees.isEmpty)
+        val typParams = tvars.map { case ((n, i), _) => TypeVariable.tvar(n, i) }
+        constant.createDefinition(typ = ityp, body = Cord(defi.body), typParams = typParams, output = output)
+      }
+    }
+
+    // Auto definitions
+    def createDef(name: String, prop: Term, serial: Long) =
+      prop match {
+        case App(App(Const("Pure.eq", _), Const(constName, typ)), body) =>
+          println(s"Autogen def $constName, $name, $serial")
+          val ityp = ITyp(typ)
+          val constant = Constants.get(constName)
+          for (typParams <- Utils.typParametersOfProp(prop))
+            yield
+              // TODO: check that all `this.typParams` occur in `ityp`
+              constant.createDefinition(typ = ityp, body = Utils.translateTermClean(body).toCord, typParams = typParams, output = output)
+        case _ =>
+          Future.unit
+      }
+
+    def createDefs(axioms: List[(String, Term, Long)]): Future[Unit] = axioms match
+      case ::((name, prop, serial), rest) => for (_ <- createDef(name, prop, serial); _ <- createDefs(rest)) yield {}
+      case Nil => Future.unit
+
+    // TODO: sorting by serial number does not work, unfortunately. :(
+    createDefs(axioms.sortBy(_._3))
+  }
+
   def createTheory(name: String): Future[ITheory] = {
     println(s"Starting theory $name")
     val outputFile = Globals.outputDir.resolve(s"IsabelleHOL/${name.replace('.','/')}.lean")
@@ -48,7 +88,8 @@ object ITheory {
            Constant.createConstant(theory = name, name = constName, output = output, typ = ITyp(typ))));
          _ = for (constant <- constants) Constants.add(constant);
          isabelleAxioms <- IsabelleOps.getAxiomsOf(thy).retrieve;
-         axioms <- Future.sequence(isabelleAxioms.map((axiomName, prop) =>
+         _ <- createDefinitions(axioms = isabelleAxioms, output = output, theory = name);
+         axioms <- Future.sequence(isabelleAxioms.map((axiomName, prop, serial) =>
            Axiom.createAxiom(name = axiomName, prop = prop.concreteRecursive, output = output, theory = name))))
     yield {
       for (axiom <- axioms) Axioms.add(axiom)

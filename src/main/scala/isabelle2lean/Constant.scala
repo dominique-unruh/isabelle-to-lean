@@ -57,10 +57,8 @@ case class Constant(typeFullName: String, name: String, typ: ITyp,
       case inst : Instantiated => fullName == inst.fullName
       case _ => false
 
-    def substitute(subst: IterableOnce[(TypeVariable, ITyp)]): Future[Instantiated] =
-      for (typ2 <- Utils.substituteTyp(typ, subst);
-           inst = Constant.this.instantiate(typ2))
-        yield inst
+    def substitute(subst: TypSubstitution): Instantiated =
+      Constant.this.instantiate(subst.substitute(typ))
 
     lazy val definitionMatch: Option[OutputTerm] = {
       val matches = definitions.map(_.matches(typ)) // List of futures of optional results
@@ -115,15 +113,15 @@ case class Constant(typeFullName: String, name: String, typ: ITyp,
     def atIdentifier: Identifier = Identifier(fullName, at = true)
   }
 
-  def createDefinition(typ: ITyp, body: Cord, typParams: List[TypeVariable], theory: ITheory): Definition = {
+  def createDefinition(typ: ITyp, body: Cord, typParams: List[TypeVariable], output: PrintWriter): Definition = {
     val defTypParamString = Utils.parenList(typParams.map(_.outputTerm), prefix = " ")
     val definition = Definition(typ, body, typParams)
-    theory.println(
+    Utils.printto(output,
       cord"""/-- Def of Isabelle constant $name :: ${typ.pretty}, at type ${typ.pretty} -/
 noncomputable def ${definition.fullName}${defTypParamString} : ${typ.outputTerm}
 := ${definition.body}
 """)
-    synchronized { 
+    synchronized {
       definitions = definition :: definitions
       cache.clear() // We could also just filter out everything with !.isDefined
     }
@@ -165,4 +163,6 @@ object Constant {
 
   def printStats(): Unit =
     println(s"Instantiated constant stats: ${misses.get}/${lookups1.get}+${lookups2.get}")
+
+  case class ManualDefinition(theory: String, constant: String, typ: String, body: String)
 }

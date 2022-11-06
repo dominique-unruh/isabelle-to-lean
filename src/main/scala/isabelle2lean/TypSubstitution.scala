@@ -16,6 +16,6 @@ class TypSubstitution(subst: List[(Typ, Typ)]) {
 
 object TypSubstitution {
   def apply(tvars: List[TypeVariable], replacement: List[ITyp]): TypSubstitution = new TypSubstitution(
-    tvars.zipStrict(replacement).map { case (v,r) => (v.typ, r.typ) }
+    tvars.zipStrict(replacement).map { case (v,r) => (v.typ.typ, r.typ) }
   )
 }

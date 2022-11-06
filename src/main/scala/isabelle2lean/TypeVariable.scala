@@ -4,7 +4,7 @@ import de.unruh.isabelle.pure.{TVar, Typ}
 
 import Globals.isabelle
 
-case class TypeVariable(fullName: String, typ: Typ) {
+case class TypeVariable private (fullName: String, typ: ITyp) {
   def identifier: Identifier =
     Identifier(fullName)
 
@@ -15,6 +15,9 @@ case class TypeVariable(fullName: String, typ: Typ) {
 object TypeVariable {
   def tvar(name: String, index: Int): TypeVariable = {
     val name2 = Naming.mapName(name = name, extra = index, category = Namespace.TVar)
-    TypeVariable(fullName = name2, typ = TVar(name, index, Nil))
+    TypeVariable(fullName = name2, typ = ITyp(TVar(name, index, Nil)))
   }
+
+//  def apply(typ: ITyp): TypeVariable = typ.typ match
+//    case TVar(name, index, sort) => tvar(name, index)
 }
