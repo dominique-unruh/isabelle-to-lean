@@ -2,7 +2,7 @@ package isabelle2lean
 
 import de.unruh.isabelle.control.Isabelle
 import de.unruh.isabelle.mlvalue.MLValue
-import de.unruh.isabelle.pure.{MLValueTerm, MLValueTyp, TFree, TVar, Typ, Type}
+import de.unruh.isabelle.pure.{MLValueTerm, MLValueTyp, TFree, TVar, Term, Typ, Type}
 
 import scala.concurrent.ExecutionContext.Implicits.given
 import de.unruh.isabelle.mlvalue.Implicits.given
@@ -43,8 +43,14 @@ object ITyp {
     case Type("fun", _*) => throw new RuntimeException("should not happen")
     case Type(tcon, typs@_*) => Application(Identifier(mapName(tcon, category = Namespace.TypeCon)),
       typs.map(translateTyp): _*)
-    case TVar(name, index, sort) => Identifier(mapName(name = name, extra = index, category = Namespace.TVar))
-    case TFree(name, sort) => Identifier(mapName(name, category = Namespace.TFree))
+    case TVar(name, index, sort) =>
+      if (sort.nonEmpty && sort != List("HOL.type"))
+        println(s"Sort encountered 1: $sort")
+      Identifier(mapName(name = name, extra = index, category = Namespace.TVar))
+    case TFree(name, sort) =>
+//      if (sort.nonEmpty)
+//        println(s"Sort encountered 2: $sort")
+      Identifier(mapName(name, category = Namespace.TFree))
   }
 
   def parse(string: String): ITyp = ITyp(Typ(Globals.ctxt, string))

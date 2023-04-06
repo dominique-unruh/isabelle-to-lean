@@ -36,5 +36,19 @@ instance (a b: Type) [sa: Nonempty a]: Nonempty (Sum_Type_sum a b) :=
   match sa with | Nonempty.intro xa => Nonempty.intro (Sum_Type_sum.inl xa)
 instance: Nonempty Num_num_num_IITN_num := proof_omitted
 
+def typedef {a: Type} (S: Set_set a) : Type := 
+  if (Classical.propDecidable (exists x, S x = true)).decide then {x : a // S x = true} else Unit
 
+instance typedef_Nonempty (a: Type) (S: Set_set a): Nonempty (typedef S) := by
+  rw [typedef]
+  by_cases (exists x, S x = true)
+  case inl H =>
+    simp [H]
+    apply H.elim
+    intro x Hx
+    exact Nonempty.intro ⟨x, Hx⟩
+  case inr H =>
+    simp [H]
+    exact Nonempty.intro ()
+    
 axiom Pure_proof : Type

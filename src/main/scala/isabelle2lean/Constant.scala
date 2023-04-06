@@ -141,7 +141,9 @@ object Constant {
 //      val typ = ITyp(typ0)
       val typParams = typParams0 map {
         case typ @ TVar(name, index, sort) =>
-          assert(sort.isEmpty || sort == List("HOL.type"), sort)
+          if(sort.nonEmpty && sort != List("HOL.type")) {
+            println(s"WARNING: definition of constant $name contains variable $typ of with sort $sort. Can we safetly ignore that?")
+          }
           TypeVariable.tvar(name, index)
         case typ => throw new AssertionError(s"createConstant: $typ")
       }

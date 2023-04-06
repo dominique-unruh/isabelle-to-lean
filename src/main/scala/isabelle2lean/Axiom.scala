@@ -131,10 +131,6 @@ case class Axiom private[Axiom] (fullName: String, name: String,
     val proofTypParamString = Utils.parenList(typParams.map(_.outputTerm), prefix = " ")
     val proofValParamString = Utils.parenList(proofValParams.map(_.outputTerm), prefix = " ")
     val proofProp = TypSubstitution(typParams, typArgs).substitute(prop)
-    // TODO: The exception here is because constants are not created according to their dependency order.
-    // Solution: before creating proofs, or axiom types, we should make a first scan of the axioms to find all constants and order them by dependency
-    // and only then do we dump the axiom types
-    // Maybe: `Name_Space.the_entry_theory_name axiom_space name |> #serial` might give us something to sort by to get constants/axioms in declaration order
     val proofPropOutputTerm = Utils.translateTermClean(proofProp, constants = ForgetfulBuffer(constant => assert(constant.isDefined, constant)))
     Utils.printto(output,
       cord"""/-- Proof of Isabelle axiom $name ${prop.pretty(ctxt)}, for typ args ${typArgs.mkCord(", ")} -/
@@ -171,6 +167,11 @@ object Axiom {
     val axiomFullName: String = Naming.mapName(prefix = "axiom_", name = name, category = Namespace.Axiom)
     for (typParams <- Utils.typParametersOfProp(prop);
          valParams <- Utils.valParametersOfProp(prop)) yield {
+
+      if (Utils.hasSorts(prop)) {
+        println(s"Axiom $name has sorts!")
+        sys.exit(1)
+      }
 
       val constantsBuffer = UniqueListBuffer[Constant#Instantiated]()
       val propString = Utils.translateTermClean(prop, constants = constantsBuffer)

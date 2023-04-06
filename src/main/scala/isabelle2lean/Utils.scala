@@ -238,4 +238,15 @@ object Utils {
   def printto(output: PrintWriter, text: Cord): Unit = output.synchronized {
     output.println(text.shows)
   }
+
+
+  def hasSorts(term: Term): Boolean = {
+    val found = for ((v, sort) <- IsabelleOps.addTVars(term).retrieveNow ++ IsabelleOps.addTFrees(term).retrieveNow;
+                     if sort.nonEmpty)
+    yield {
+      println(s"has sort: $v, $sort in $term")
+      ()
+    }
+    found.nonEmpty
+  }
 }

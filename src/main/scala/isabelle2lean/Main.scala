@@ -89,7 +89,8 @@ object Main {
 
 //    val pureThy = await(Theories.compute("Pure"))
 //    val holThy = await(Theories.compute("HOL.HOL"))
-    val natThy = await(Theories.compute("HOL.Nat"))
+//    val natThy = await(Theories.compute("HOL.Nat"))
+    val mainThy = await(Theories.compute("Main"))
 
     println("Created theories")
 
